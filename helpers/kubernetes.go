@@ -1,16 +1,81 @@
 package helpers
 
 import (
+	"context"
+	"path/filepath"
 	"time"
 
 	"github.com/layer5io/meshery/models"
-	"github.com/pkg/errors"
+	"github.com/layer5io/meshkit/utils"
+	mesherykube "github.com/layer5io/meshkit/utils/kubernetes"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+// NewDynamicClientGenerator takes in the kubeconfig *directory* path and returns a
+// function which can generate dynamic client
+func NewDynamicClientGenerator(path string) func() (dynamic.Interface, error) {
+	configPath := filepath.Join(path, "config")
+
+	config, err := utils.ReadLocalFile(configPath)
+	return func() (dynamic.Interface, error) {
+		if err != nil {
+			return nil, ErrNewDynamicClientGenerator(err)
+		}
+
+		return NewDynamicClient([]byte(config))
+	}
+}
+
+// NewKubeClientGenerator takes in the kubeconfig *directory* path and returns a
+// function which can generate dynamic client
+func NewKubeClientGenerator(path string) func() (*mesherykube.Client, error) {
+	configPath := filepath.Join(path, "config")
+
+	config, err := utils.ReadLocalFile(configPath)
+	return func() (*mesherykube.Client, error) {
+		if err != nil {
+			return nil, ErrNewKubeClientGenerator(err)
+		}
+
+		return NewKubeClient([]byte(config))
+	}
+}
+
+// NewDynamicClient generates new dynamic go client
+func NewDynamicClient(kubeconfig []byte) (dynamic.Interface, error) {
+	var (
+		restConfig *rest.Config
+		err        error
+	)
+
+	if len(kubeconfig) > 0 {
+		restConfig, err = clientcmd.RESTConfigFromKubeConfig(kubeconfig)
+		if err != nil {
+			return nil, ErrRestConfigFromKubeConfig(err)
+		}
+	} else {
+		restConfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, ErrInClusterConfig(err)
+		}
+	}
+
+	return dynamic.NewForConfig(restConfig)
+}
+
+func NewKubeClient(kubeconfig []byte) (*mesherykube.Client, error) {
+	client, err := mesherykube.New(kubeconfig)
+	if err != nil {
+		return nil, ErrNewKubeClient(err)
+	}
+
+	return client, nil
+}
 
 func getK8SClientSet(kubeconfig []byte, contextName string) (*kubernetes.Clientset, error) {
 	var clientConfig *rest.Config
@@ -18,33 +83,25 @@ func getK8SClientSet(kubeconfig []byte, contextName string) (*kubernetes.Clients
 	if len(kubeconfig) == 0 {
 		clientConfig, err = rest.InClusterConfig()
 		if err != nil {
-			err = errors.Wrap(err, "unable to load in-cluster kubeconfig")
-			logrus.Error(err)
-			return nil, err
+			return nil, ErrInClusterConfig(err)
 		}
 	} else {
 		config, err := clientcmd.Load(kubeconfig)
 		if err != nil {
-			err = errors.Wrap(err, "unable to load kubeconfig")
-			logrus.Error(err)
-			return nil, err
+			return nil, ErrInvalidK8SConfig(err)
 		}
 		if contextName != "" {
 			config.CurrentContext = contextName
 		}
 		clientConfig, err = clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{}).ClientConfig()
 		if err != nil {
-			err = errors.Wrap(err, "unable to create client config from config")
-			logrus.Error(err)
-			return nil, err
+			return nil, ErrClientConfig(err)
 		}
 	}
 	clientConfig.Timeout = 2 * time.Minute
 	clientset, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
-		err = errors.Wrap(err, "unable to create client set")
-		logrus.Error(err)
-		return nil, err
+		return nil, ErrClientSet(err)
 	}
 	return clientset, nil
 }
@@ -53,18 +110,16 @@ func getK8SClientSet(kubeconfig []byte, contextName string) (*kubernetes.Clients
 func FetchKubernetesNodes(kubeconfig []byte, contextName string) ([]*models.K8SNode, error) {
 	clientset, err := getK8SClientSet(kubeconfig, contextName)
 	if err != nil {
-		return nil, err
+		return nil, ErrFetchKubernetesNodes(err)
 	}
 	var nodes []*models.K8SNode
 
 	// nodes
 	nodesClient := clientset.CoreV1().Nodes()
 	logrus.Debugf("Listing nodes")
-	nodelist, err := nodesClient.List(metav1.ListOptions{})
+	nodelist, err := nodesClient.List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		err = errors.Wrap(err, "unable to get the list of nodes")
-		logrus.Error(err)
-		return nil, err
+		return nil, ErrFetchNodes(err)
 	}
 	for _, n := range nodelist.Items {
 		// logrus.Debugf(" * %s (%d replicas)", n.Name, *d.Spec.Replicas)
@@ -111,14 +166,12 @@ func FetchKubernetesNodes(kubeconfig []byte, contextName string) ([]*models.K8SN
 func FetchKubernetesVersion(kubeconfig []byte, contextName string) (string, error) {
 	clientset, err := getK8SClientSet(kubeconfig, contextName)
 	if err != nil {
-		return "", err
+		return "", ErrFetchKubernetesVersion(err)
 	}
 
 	serverVersion, err := clientset.ServerVersion()
 	if err != nil {
-		err = errors.Wrap(err, "unable to get server version")
-		logrus.Error(err)
-		return "", err
+		return "", ErrFetchKubernetesVersion(err)
 	}
 	logrus.Debugf("Kubernetes API Server version: %s", serverVersion.String())
 	return serverVersion.String(), nil

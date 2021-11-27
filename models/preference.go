@@ -9,12 +9,13 @@ import (
 
 // K8SConfig represents all the k8s session config
 type K8SConfig struct {
-	InClusterConfig   bool   `json:"inClusterConfig,omitempty"`
-	K8Sfile           string `json:"k8sfile,omitempty"`
-	Config            []byte `json:"config,omitempty"`
-	Server            string `json:"configuredServer,omitempty"`
-	ContextName       string `json:"contextName,omitempty"`
-	ClusterConfigured bool   `json:"clusterConfigured,omitempty"`
+	InClusterConfig   bool         `json:"inClusterConfig,omitempty"`
+	K8Sfile           string       `json:"k8sfile,omitempty"`
+	Config            []byte       `json:"config,omitempty"`
+	Server            string       `json:"configuredServer,omitempty"`
+	ContextName       string       `json:"contextName,omitempty"`
+	ClusterConfigured bool         `json:"clusterConfigured,omitempty"`
+	Contexts          []K8SContext `json:"contexts,omitempty"`
 	// ConfiguredServer  string `json:"configuredServer,omitempty"`
 
 	ServerVersion string     `json:"server_version,omitempty"`
@@ -74,6 +75,12 @@ type LoadTestPreferences struct {
 	LoadGenerator      string `json:"gen,omitempty"`
 }
 
+// Parameters to updates Anonymous stats
+type PreferenceParams struct {
+	AnonymousUsageStats  bool `json:"anonymousUsageStats"`
+	AnonymousPerfResults bool `json:"anonymousPerfResults"`
+}
+
 // Preference represents the data stored in session / local DB
 type Preference struct {
 	K8SConfig            *K8SConfig           `json:"k8sConfig,omitempty"`
@@ -99,5 +106,11 @@ type PreferencePersister interface {
 
 	// Lock(userID string)
 	// Unlock(userID string)
-	ClosePersister()
+	// ClosePersister()
+}
+
+// Parameters to save Grafana configuration
+type GrafanaConfigParams struct {
+	GrafanaURL    string `json:"grafanaURL,omitempty"`
+	GrafanaAPIKey string `json:"grafanaAPIKey,omitempty"`
 }

@@ -1,5 +1,7 @@
 package handlers
 
 const (
-	cookieSuffix = "_referrer"
+	cookieSuffix      = "_referrer"
+	mesheryGitHubOrg  = "meshery"
+	mesheryGitHubRepo = "meshery"
 )

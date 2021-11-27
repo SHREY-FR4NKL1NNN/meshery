@@ -1,11 +1,15 @@
-ADAPTER_URLS := "mesherylocal.layer5.io:10000 mesherylocal.layer5.io:10001 mesherylocal.layer5.io:10002 mesherylocal.layer5.io:10003 mesherylocal.layer5.io:10004 mesherylocal.layer5.io:10008 mesherylocal.layer5.io:10009"
+ADAPTER_URLS := "mesherylocal.layer5.io:10000 mesherylocal.layer5.io:10001 mesherylocal.layer5.io:10002 mesherylocal.layer5.io:10003 mesherylocal.layer5.io:10004 mesherylocal.layer5.io:10005 mesherylocal.layer5.io:10006 mesherylocal.layer5.io:10007 mesherylocal.layer5.io:10008 mesherylocal.layer5.io:10009 meshery-nginx-sm:10010"
 
-MESHERY_CLOUD_LOCAL=http://mesherylocal.layer5.io:9876
-MESHERY_CLOUD_DEV=http://localhost:9876
-MESHERY_CLOUD_PROD=https://meshery.layer5.io
-MESHERY_CLOUD_STAGING=https://staging-meshery.layer5.io
+MESHERY_CLOUD_LOCAL="http://mesherylocal.layer5.io:9876"
+MESHERY_CLOUD_DEV="http://localhost:9876"
+MESHERY_CLOUD_PROD="https://meshery.layer5.io"
+MESHERY_CLOUD_STAGING="https://staging-meshery.layer5.io"
 GIT_VERSION=$(shell git describe --tags `git rev-list --tags --max-count=1`)
 GIT_COMMITSHA=$(shell git rev-list -1 HEAD)
+RELEASE_CHANNEL="edge"
+# Please do not remove the code below(the code already removed several times), those constant will help on local CI check, like $ make chart-readme or $ make golangci-run
+GOPATH = $(shell go env GOPATH)
+GOBIN  = $(GOPATH)/bin
 
 # Build the CLI for Meshery - `mesheryctl`.
 # Build Meshery inside of a multi-stage Docker container.
@@ -16,15 +20,15 @@ mesheryctl:
 # `make docker` builds Meshery inside of a multi-stage Docker container.
 # This method does NOT require that you have Go, NPM, etc. installed locally.
 docker:
-	DOCKER_BUILDKIT=1 docker build -t layer5/meshery --build-arg TOKEN=$(GLOBAL_TOKEN) --build-arg GIT_COMMITSHA=$(GIT_COMMITSHA) --build-arg GIT_VERSION=$(GIT_VERSION) .
+	DOCKER_BUILDKIT=1 docker build -t layer5/meshery --build-arg TOKEN=$(GLOBAL_TOKEN) --build-arg GIT_COMMITSHA=$(GIT_COMMITSHA) --build-arg GIT_VERSION=$(GIT_VERSION) --build-arg RELEASE_CHANNEL=${RELEASE_CHANNEL} .
 
 # Runs Meshery in a container locally and points to locally-running
 #  Meshery Cloud for user authentication.
-docker-run-local-cloud: 
+docker-run-local-cloud:
 	(docker rm -f meshery) || true
 	docker run --name meshery -d \
 	--link meshery-cloud:meshery-cloud \
-	-e SAAS_BASE_URL=$(MESHERY_CLOUD_LOCAL) \
+	-e PROVIDER_BASE_URLS=$(MESHERY_CLOUD_LOCAL) \
 	-e DEBUG=true \
 	-e ADAPTER_URLS=$(ADAPTER_URLS) \
 	-p 9081:8080 \
@@ -32,10 +36,10 @@ docker-run-local-cloud:
 
 # Runs Meshery in a container locally and points to remote
 #  Meshery Cloud for user authentication.
-docker-run-cloud: 
+docker-run-cloud:
 	(docker rm -f meshery) || true
 	docker run --name meshery -d \
-	-e SAAS_BASE_URL=$(MESHERY_CLOUD_PROD) \
+	-e PROVIDER_BASE_URLS=$(MESHERY_CLOUD_PROD) \
 	-e DEBUG=true \
 	-e ADAPTER_URLS=$(ADAPTER_URLS) \
 	-v meshery-config:/home/appuser/.meshery/config \
@@ -46,10 +50,10 @@ docker-run-cloud:
 # Runs Meshery on your local machine and points to locally-running
 #  Meshery Cloud for user authentication.
 
-run-local-cloud: 
+run-local-cloud: error
 	cd cmd; go clean; rm meshery; go mod tidy; \
-	go build -ldflags="-w -s -X main.version=${GIT_VERSION} -X main.commitsha=${GIT_COMMITSHA}" -tags draft -a -o meshery; \
-	SAAS_BASE_URL=$(MESHERY_CLOUD_DEV) \
+	go build -ldflags="-w -s -X main.version=${GIT_VERSION} -X main.commitsha=${GIT_COMMITSHA} -X main.releasechannel=${RELEASE_CHANNEL}" -tags draft -a -o meshery; \
+	PROVIDER_BASE_URLS=$(MESHERY_CLOUD_DEV) \
 	PORT=9081 \
 	DEBUG=true \
 	ADAPTER_URLS=$(ADAPTER_URLS) \
@@ -58,26 +62,56 @@ run-local-cloud:
 
 # Builds and runs Meshery to run on your local machine.
 #  and points to remote Meshery Cloud for user authentication.
-run-local: 
+run-local: error
 	cd cmd; go clean; rm meshery; go mod tidy; \
-	go build -ldflags="-w -s -X main.version=${GIT_VERSION} -X main.commitsha=${GIT_COMMITSHA}" -tags draft -a -o meshery; \
-	SAAS_BASE_URL=$(MESHERY_CLOUD_PROD) \
+	go build -ldflags="-w -s -X main.version=${GIT_VERSION} -X main.commitsha=${GIT_COMMITSHA} -X main.releasechannel=${RELEASE_CHANNEL}" -tags draft -a -o meshery; \
+	PROVIDER_BASE_URLS=$(MESHERY_CLOUD_LOCAL) \
 	PORT=9081 \
 	DEBUG=true \
 	ADAPTER_URLS=$(ADAPTER_URLS) \
 	./meshery; \
 	cd ..
 
-golangci-run:
+run-fast:
+	cd cmd; go mod tidy; \
+	BUILD="$(GIT_VERSION)" \
+	PROVIDER_BASE_URLS=$(MESHERY_CLOUD_PROD) \
+	PORT=9081 \
+	DEBUG=true \
+	ADAPTER_URLS=$(ADAPTER_URLS) \
+	SKIP_COMP_GEN=TRUE \
+	go run main.go;
+
+run-16-fast:
+	cd cmd; go1.16.4 mod tidy; \
+	BUILD="$(GIT_VERSION)" \
+	PROVIDER_BASE_URLS=$(MESHERY_CLOUD_PROD) \
+	PORT=9081 \
+	DEBUG=true \
+	ADAPTER_URLS=$(ADAPTER_URLS) \
+	go1.16.4 run main.go;
+
+run-fast-cloud: error
+	cd cmd; go mod tidy; \
+	PROVIDER_BASE_URLS=$(MESHERY_CLOUD_DEV) \
+	PORT=9081 \
+	DEBUG=true \
+	ADAPTER_URLS=$(ADAPTER_URLS) \
+	go run main.go;
+
+
+golangci-run: error
 	GO111MODULE=off GOPROXY=direct GOSUMDB=off go get github.com/golangci/golangci-lint/cmd/golangci-lint@v1.30.0;
 	$(GOPATH)/bin/golangci-lint run
 
 proto:
+	# see https://grpc.io/docs/languages/go/quickstart/
 	# go get -u google.golang.org/grpc
-	# go get -u github.com/golang/protobuf/protoc-gen-go
+	# go get -u google.golang.org/protobuf/cmd/protoc-gen-go \
+	#         google.golang.org/grpc/cmd/protoc-gen-go-grpc
 	# PATH=$(PATH):`pwd`/../protoc/bin:$(GOPATH)/bin
 	# export PATH=$PATH:`pwd`/../protoc/bin:$GOPATH/bin
-	protoc -I meshes/ meshes/meshops.proto --go_out=plugins=grpc:./meshes/
+	protoc -I meshes/ meshes/meshops.proto --go-grpc_out=./meshes/ --go_out=./meshes/
 
 # Installs dependencies for building the user interface.
 setup-ui-libs:
@@ -109,6 +143,14 @@ build-ui:
 	cd ui; npm run build && npm run export; cd ..
 	cd provider-ui; npm run build && npm run export; cd ..
 
+# Builds only the meshery user interface on your local machine
+build-meshery-ui:
+	cd ui; npm run build && npm run export; cd ..
+
+# Builds only the provider user interface on your local machine
+build-provider-ui:
+	cd provider-ui; npm run build && npm run export; cd ..
+
 # setup wrk2 for local dev
 # NOTE: setup-wrk does not work on Mac Catalina at the moment
 setup-wrk2:
@@ -120,13 +162,37 @@ setup-nighthawk:
 #Incorporating Make docs commands from the Docs Makefile
 jekyll=bundle exec jekyll
 
-docs:
-	$(jekyll) serve --drafts --livereload
+site:
+	cd docs; bundle install; $(jekyll) serve --drafts --livereload --config _config_dev.yml
+
 
 build-docs:
-	$(jekyll) build --drafts --livereload
+	cd docs; $(jekyll) build --drafts
 
 docker-docs:
-	docker run --name meshery-docs --rm -p 4000:4000 -v `pwd`:"/srv/jekyll" jekyll/jekyll:3.8.5 bash -c "bundle install; jekyll serve --drafts --livereload"
+	cd docs; docker run --name meshery-docs --rm -p 4000:4000 -v `pwd`:"/srv/jekyll" jekyll/jekyll:4.0.0 bash -c "bundle install; jekyll serve --drafts --livereload"
 
+.PHONY: chart-readme
+chart-readme:
+	GO111MODULE=on go get github.com/norwoodj/helm-docs/cmd/helm-docs 
+	$(GOPATH)/bin/helm-docs -c install/kubernetes/helm/meshery-operator
 
+swagger-spec:
+	swagger generate spec -o ./helpers/swagger.yaml --scan-models
+
+swagger-run:swagger-spec
+	swagger serve ./helpers/swagger.yaml
+
+swagger-docs:
+	swagger generate spec -o ./docs/_data/swagger.yml --scan-models; \
+	swagger flatten ./docs/_data/swagger.yml -o ./docs/_data/swagger.yml --with-expand --format=yaml
+
+graphql-docs:
+	cd docs; build-docs; bundle exec rake graphql:compile_docs
+
+gqlgen-generate:
+	cd internal/graphql; go run -mod=mod github.com/99designs/gqlgen generate
+
+.PHONY: error
+error:
+	go run github.com/layer5io/meshkit/cmd/errorutil -d . analyze -i ./helpers -o ./helpers --skip-dirs mesheryctl

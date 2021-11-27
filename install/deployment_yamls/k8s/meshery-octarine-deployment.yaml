@@ -21,9 +21,10 @@ spec:
       labels:
         io.kompose.service: meshery-octarine
     spec:
-      serviceAccount: meshery
+      serviceAccount: meshery-server
       containers:
         - image: layer5/meshery-octarine:stable-latest
+          imagePullPolicy: Always
           name: meshery-octarine
           ports:
             - containerPort: 10003

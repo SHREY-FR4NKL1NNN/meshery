@@ -6,19 +6,21 @@ replicaCount: 1
 restartPolicy: Always
 
 image:
-  repository: layer5/meshery:stable-latest
-  pullPolicy: IfNotPresent
+  repository: layer5/meshery
+  tag: stable-latest
+  pullPolicy: Always
 
 env:
   EVENT: mesheryLocal
   SAAS_BASE_URL: https://meshery.layer5.io
-  ADAPTER_URLS: meshery-istio:10000 meshery-linkerd:10001 meshery-consul:10002
+  PROVIDER_BASE_URLS: https://meshery.layer5.io
+  ADAPTER_URLS: meshery-istio:10000 meshery-linkerd:10001 meshery-consul:10002 meshery-kuma:10007 meshery-osm:10009 meshery-nginx-sm:10010 meshery-nsm:10004 meshery-app-mesh:10005 meshery-traefik-mesh:10006 meshery-cpx:10008
 
 probe:
-  #TODO: Need to confirm the health check path of meshery. 
+  #TODO: Need to confirm the health check path of meshery.
   livenessProbe:
     enabled: false
-  readinessProbe: 
+  readinessProbe:
     enabled: false
 
 
@@ -26,11 +28,14 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-serviceAccount:
+# For AKS AWS GCP to get the permissions to watch the nodes
+rbac:
+  nodes: false
 
+serviceAccount:
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
-  name: meshery-service-account
+  name: "meshery-server"
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -46,8 +51,9 @@ securityContext: {}
   # runAsUser: 1000
 
 service:
-  type: ClusterIP
-  port: 8080
+  type: LoadBalancer
+  port: 9081
+  target_port: 8080
   annotations: {}
 
 ingress:
@@ -83,31 +89,75 @@ tolerations: []
 affinity: {}
 
 
-# Deploy meshery-istio
-#
-mesheryistio:
+# By default, the adapters need to have the same cluster role as the meshery to have permissions for performing necessary operations
+
+# If need to use a different service accounts for the adapters, modify the serviceAccountNameOverride for the corresponding adapters here,
+# or set the serviceAccountNameOverride to empty while setting the serviceAccount information in the sub-chart accordingly
+meshery-app-mesh:
+  enabled: true
+  fullnameOverride: meshery-app-mesh
+  serviceAccountNameOverride: meshery-server
+
+meshery-istio:
   enabled: true
   fullnameOverride: meshery-istio
-  
+  serviceAccountNameOverride: meshery-server
 
-# Deploy meshery-linkerd
-# 
-mesherylinkerd:
+meshery-linkerd:
   enabled: true
   fullnameOverride: meshery-linkerd
+  serviceAccountNameOverride: meshery-server
 
-mesheryconsul:
+meshery-consul:
   enabled: true
   fullnameOverride: meshery-consul
+  serviceAccountNameOverride: meshery-server
+
+meshery-kuma:
+  enabled: true
+  fullnameOverride: meshery-kuma
+  serviceAccountNameOverride: meshery-server
+
+meshery-osm:
+  enabled: true
+  fullnameOverride: meshery-osm
+  serviceAccountNameOverride: meshery-server
+
+meshery-nsm:
+  enabled: true
+  fullnameOverride: meshery-nsm
+  serviceAccountNameOverride: meshery-server
+
+meshery-nginx-sm:
+  enabled: true
+  fullnameOverride: meshery-nginx-sm
+  serviceAccountNameOverride: meshery-server
+
+meshery-traefik-mesh:
+  enabled: true
+  fullnameOverride: meshery-traefik-mesh
+  serviceAccountNameOverride: meshery-server
+
+meshery-cpx:
+  enabled: true
+  fullnameOverride: meshery-cpx
+  serviceAccountNameOverride: meshery-server
+
+# The operator has its own cluster role
+meshery-operator:
+  enabled: true
+  fullnameOverride: meshery-operator
 
 # If there need the test cases set it as true.
 #
 testCase:
   enabled: false
 
-# # TODO: There need to confirm that we should deploy the Gateway and VirtualService for Meshery or not. 
+# # TODO: There need to confirm that we should deploy the Gateway and VirtualService for Meshery or not.
 # There will be an issue when deploying Meshery before Istio and this could make the deploying fail.
 # meshery-gateway
 #
 mesherygateway:
   enabled: false
+  selector:
+    istio: ingressgateway

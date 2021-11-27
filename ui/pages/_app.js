@@ -1,23 +1,28 @@
 import React from 'react';
 import App from 'next/app';
 import Head from 'next/head';
-import { MuiThemeProvider, createMuiTheme, withStyles } from '@material-ui/core/styles';
+import { MuiThemeProvider,  withStyles } from '@material-ui/core/styles';
 import CssBaseline from '@material-ui/core/CssBaseline';
 import getPageContext from '../components/PageContext';
 import Navigator from '../components/Navigator';
 import Header from '../components/Header';
 import PropTypes from 'prop-types';
 import Hidden from '@material-ui/core/Hidden';
-import Paper from '@material-ui/core/Paper';
 import withRedux from "next-redux-wrapper";
 import { makeStore, actionTypes } from '../lib/store';
-import {Provider} from "react-redux";
-import { fromJS } from 'immutable'
+import { Provider } from "react-redux";
+import { fromJS } from 'immutable';
 import { NoSsr, Typography } from '@material-ui/core';
 import FavoriteIcon from '@material-ui/icons/Favorite';
 import { SnackbarProvider } from 'notistack';
 import { MuiPickersUtilsProvider } from '@material-ui/pickers';
 import MomentUtils from '@date-io/moment';
+import {
+  CheckCircle,
+  Info,
+  Error,
+  Warning
+} from '@material-ui/icons';
 
 // codemirror + js-yaml imports when added to a page was preventing to navigating to that page using nextjs
 // link clicks, hence attempting to add them here
@@ -30,9 +35,9 @@ import './../public/static/style/index.css';
 // import 'billboard.js/dist/theme/graph.min.css';
 import 'billboard.js/dist/billboard.min.css';
 
-import { blueGrey } from '@material-ui/core/colors';
 import MesheryProgressBar from '../components/MesheryProgressBar';
 import dataFetch from '../lib/data-fetch';
+import theme, { styles } from "../themes"
 
 if (typeof window !== 'undefined') {
   require('codemirror/mode/yaml/yaml');
@@ -49,299 +54,106 @@ if (typeof window !== 'undefined') {
   }
 }
 
-let theme = createMuiTheme({
-  typography: {
-    useNextVariants: true,
-    h5: {
-      fontWeight: 'bolder',
-      fontSize: 26,
-      letterSpacing: 0.5,
-    },
-  },
-  palette: {
-    // primary: {
-    //   light: '#cfd8dc',
-    //   main: '#607d8b',
-    //   dark: '#455a64',
-    // },
-    primary: blueGrey,
-    secondary: {
-      main: '#EE5351',
-    },
-  },
-  shape: {
-    borderRadius: 8,
-  },
-  breakpoints: {
-    values: {
-      xs: 0,
-      sm: 600,
-      md: 960,
-      lg: 1280,
-      xl: 1920,
-    },
-  },
-});
-
-theme = {
-  ...theme,
-  overrides: {
-    MuiDrawer: {
-      paper: {
-        backgroundColor: '#263238',
-      },
-    },
-    MuiButton: {
-      label: {
-        textTransform: 'initial',
-      },
-      contained: {
-        boxShadow: 'none',
-        '&:active': {
-          boxShadow: 'none',
-        },
-      },
-    },
-    MuiTabs: {
-      root: {
-        marginLeft: theme.spacing(1),
-      },
-      indicator: {
-        height: 3,
-        borderTopLeftRadius: 3,
-        borderTopRightRadius: 3,
-      },
-    },
-    MuiTab: {
-      root: {
-        textTransform: 'initial',
-        margin: '0 16px',
-        minWidth: 0,
-        // [theme.breakpoints.up('md')]: {
-        //   minWidth: 0,
-        // },
-      },
-      labelContainer: {
-        padding: 0,
-        // [theme.breakpoints.up('md')]: {
-        //   padding: 0,
-        // },
-      },
-    },
-    MuiIconButton: {
-      root: {
-        padding: theme.spacing(1),
-      },
-    },
-    MuiTooltip: {
-      tooltip: {
-        borderRadius: 4,
-      },
-    },
-    MuiDivider: {
-      root: {
-        backgroundColor: '#404854',
-      },
-    },
-    MuiListItemText: {
-      primary: {
-        fontWeight: theme.typography.fontWeightMedium,
-      },
-    },
-    MuiListItemIcon: {
-      root: {
-        color: 'inherit',
-        marginRight: 0,
-        '& svg': {
-          fontSize: 20,
-        },
-      },
-    },
-    MuiAvatar: {
-      root: {
-        width: 32,
-        height: 32,
-      },
-    },
-  },
-  props: {
-    MuiTab: {
-      disableRipple: true,
-    },
-  },
-  mixins: {
-    ...theme.mixins,
-    toolbar: {
-      minHeight: 48,
-    },
-  },
-};
-
-const drawerWidth = 256;
-
-const styles = {
-  root: {
-    display: 'flex',
-    minHeight: '100vh',
-  },
-  drawer: {
-    [theme.breakpoints.up('sm')]: {
-      width: drawerWidth,
-      flexShrink: 0,
-    },
-    transition: theme.transitions.create('width', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  },
-  drawerCollapsed: {
-    [theme.breakpoints.up('sm')]: {
-      width: theme.spacing(7) + 1,
-    },
-    transition: theme.transitions.create('width', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.leavingScreen,
-    }),
-    overflowX: 'hidden',
-  },
-  appContent: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  mainContent: {
-    flex: 1,
-    padding: '48px 36px 24px',
-    background: '#eaeff1',
-  },
-  paper: {
-    maxWidth: '90%',
-    margin: 'auto',
-    overflow: 'hidden',
-
-  },
-  footer: {
-    backgroundColor: theme.palette.background.paper,
-    padding: theme.spacing(2),
-    color: '#737373',
-  },
-  footerText: {
-    cursor: 'pointer',
-    display: 'inline',
-    verticalAlign: 'middle',
-  },
-  footerIcon: {
-    display: 'inline',
-    verticalAlign: 'top',
-  },
-  icon: {
-    fontSize: 20,
-  },
-};
-
-
 class MesheryApp extends App {
   constructor() {
     super();
     this.pageContext = getPageContext();
 
-    this.state = {
-      mobileOpen: false,
-      isDrawerCollapsed: false
-    };
+    this.state = { mobileOpen : false,
+      isDrawerCollapsed : false };
   }
 
   handleDrawerToggle = () => {
-    this.setState(state => ({ mobileOpen: !state.mobileOpen }));
-  };
-
-  handleCollapseDrawer = () => {
-    this.setState(state => ({ isDrawerCollapsed: !state.isDrawerCollapsed }));
+    this.setState(state => ({ mobileOpen : !state.mobileOpen }));
   }
+
+  handleCollapseDrawer = (open = null) => {
+    if (typeof(open) === 'boolean')
+      return this.setState({ isDrawerCollapsed : open });
+    this.setState(state => ({ isDrawerCollapsed : !state.isDrawerCollapsed }));
+  };
 
   handleL5CommunityClick = () => {
     if (typeof window !== 'undefined'){
       const w = window.open('https://layer5.io', '_blank');
       w.focus();
     }
-  }
+  };
 
   async loadConfigFromServer() {
     const { store } = this.props;
-    dataFetch('/api/config/sync', {
-      credentials: 'same-origin',
-      method: 'GET',
-      credentials: 'include',
-    }, result => {
+    dataFetch('/api/system/sync', { credentials : 'same-origin',
+      method : 'GET',
+      credentials : 'include', }, result => {
       if (typeof result !== 'undefined'){
-        if(result.k8sConfig){
-          if(typeof result.k8sConfig.inClusterConfig === 'undefined'){
+        if (result.k8sConfig){
+          if (typeof result.k8sConfig.inClusterConfig === 'undefined'){
             result.k8sConfig.inClusterConfig = false;
           }
-          if(typeof result.k8sConfig.k8sfile === 'undefined'){
+          if (typeof result.k8sConfig.k8sfile === 'undefined'){
             result.k8sConfig.k8sfile = '';
           }
-          if(typeof result.k8sConfig.contextName === 'undefined'){
+          if (typeof result.k8sConfig.contextName === 'undefined'){
             result.k8sConfig.contextName = '';
           }
-          if(typeof result.k8sConfig.clusterConfigured === 'undefined'){
+          if (typeof result.k8sConfig.clusterConfigured === 'undefined'){
             result.k8sConfig.clusterConfigured = false;
           }
-          if(typeof result.k8sConfig.configuredServer === 'undefined'){
+          if (typeof result.k8sConfig.configuredServer === 'undefined'){
             result.k8sConfig.configuredServer = '';
           }
-          store.dispatch({ type: actionTypes.UPDATE_CLUSTER_CONFIG, k8sConfig: result.k8sConfig });
+          store.dispatch({ type : actionTypes.UPDATE_CLUSTER_CONFIG, k8sConfig : result.k8sConfig });
         }
-        if(result.meshAdapters && result.meshAdapters !== null && result.meshAdapters.length > 0) {
-          store.dispatch({ type: actionTypes.UPDATE_ADAPTERS_INFO, meshAdapters: result.meshAdapters });
+        if (result.meshAdapters && result.meshAdapters !== null && result.meshAdapters.length > 0) {
+          store.dispatch({ type : actionTypes.UPDATE_ADAPTERS_INFO, meshAdapters : result.meshAdapters });
         }
-        if(result.grafana){
-          if(typeof result.grafana.grafanaURL === 'undefined'){
+        if (result.grafana){
+          if (typeof result.grafana.grafanaURL === 'undefined'){
             result.grafana.grafanaURL = '';
           }
-          if(typeof result.grafana.grafanaAPIKey === 'undefined'){
+          if (typeof result.grafana.grafanaAPIKey === 'undefined'){
             result.grafana.grafanaAPIKey = '';
           }
-          if(typeof result.grafana.grafanaBoardSearch === 'undefined'){
+          if (typeof result.grafana.grafanaBoardSearch === 'undefined'){
             result.grafana.grafanaBoardSearch = '';
           }
-          if(typeof result.grafana.grafanaBoards === 'undefined'){
+          if (typeof result.grafana.grafanaBoards === 'undefined'){
             result.grafana.grafanaBoards = [];
           }
-          if(typeof result.grafana.selectedBoardsConfigs === 'undefined'){
+          if (typeof result.grafana.selectedBoardsConfigs === 'undefined'){
             result.grafana.selectedBoardsConfigs = [];
           }
-          store.dispatch({ type: actionTypes.UPDATE_GRAFANA_CONFIG, grafana: result.grafana });
+          store.dispatch({ type : actionTypes.UPDATE_GRAFANA_CONFIG, grafana : result.grafana });
         }
-        if(result.prometheus){
-          if(typeof result.prometheus.prometheusURL === 'undefined'){
+        if (result.prometheus){
+          if (typeof result.prometheus.prometheusURL === 'undefined'){
             result.prometheus.prometheusURL = '';
           }
-          if(typeof result.prometheus.selectedPrometheusBoardsConfigs === 'undefined'){
+          if (typeof result.prometheus.selectedPrometheusBoardsConfigs === 'undefined'){
             result.prometheus.selectedPrometheusBoardsConfigs = [];
           }
-          store.dispatch({ type: actionTypes.UPDATE_PROMETHEUS_CONFIG, prometheus: result.prometheus });
+          store.dispatch({ type : actionTypes.UPDATE_PROMETHEUS_CONFIG, prometheus : result.prometheus });
         }
-        if(result.loadTestPrefs){
-          if(typeof result.loadTestPrefs.c === 'undefined'){
+        if (result.loadTestPrefs){
+          if (typeof result.loadTestPrefs.c === 'undefined'){
             result.loadTestPrefs.c = 0;
           }
-          if(typeof result.loadTestPrefs.qps === 'undefined'){
+          if (typeof result.loadTestPrefs.qps === 'undefined'){
             result.loadTestPrefs.qps = 0;
           }
-          if(typeof result.loadTestPrefs.t === 'undefined'){
+          if (typeof result.loadTestPrefs.t === 'undefined'){
             result.loadTestPrefs.t = '30s';
           }
-          if(typeof result.loadTestPrefs.gen === 'undefined'){
+          if (typeof result.loadTestPrefs.gen === 'undefined'){
             result.loadTestPrefs.gen = '';
           }
-          store.dispatch({ type: actionTypes.UPDATE_LOAD_GEN_CONFIG, loadTestPref: result.loadTestPrefs });
+          store.dispatch({ type : actionTypes.UPDATE_LOAD_GEN_CONFIG, loadTestPref : result.loadTestPrefs });
         }
-        if(typeof result.anonymousUsageStats !== 'undefined'){
-          store.dispatch({ type: actionTypes.UPDATE_ANONYMOUS_USAGE_STATS, anonymousUsageStats: result.anonymousUsageStats });
+        if (typeof result.anonymousUsageStats !== 'undefined'){
+          store.dispatch({ type : actionTypes.UPDATE_ANONYMOUS_USAGE_STATS, anonymousUsageStats : result.anonymousUsageStats });
         }
-        if(typeof result.anonymousPerfResults !== 'undefined'){
-          store.dispatch({ type: actionTypes.UPDATE_ANONYMOUS_PERFORMANCE_RESULTS, anonymousPerfResults: result.anonymousPerfResults });
+        if (typeof result.anonymousPerfResults !== 'undefined'){
+          store.dispatch({ type : actionTypes.UPDATE_ANONYMOUS_PERFORMANCE_RESULTS, anonymousPerfResults : result.anonymousPerfResults });
         }
       }
     }, error => {
@@ -349,9 +161,11 @@ class MesheryApp extends App {
     });
   }
 
-  static async getInitialProps({Component, ctx}) {
-    const pageProps = Component.getInitialProps ? await Component.getInitialProps(ctx) : {};
-    return {pageProps};
+  static async getInitialProps({ Component, ctx }) {
+    const pageProps = Component.getInitialProps
+      ? await Component.getInitialProps(ctx)
+      : {}
+    return { pageProps };
   }
 
   componentDidMount(){
@@ -359,7 +173,9 @@ class MesheryApp extends App {
   }
 
   render() {
-    const { Component, store, pageProps, classes } = this.props;
+    const {
+      Component, store, pageProps, classes
+    } = this.props;
     const { isDrawerCollapsed } = this.state;
     return (
       <NoSsr>
@@ -372,37 +188,47 @@ class MesheryApp extends App {
             <MuiPickersUtilsProvider utils={MomentUtils}>
               <div className={classes.root}>
                 <CssBaseline />
-                <nav className={isDrawerCollapsed ? classes.drawerCollapsed : classes.drawer}>
+                <nav className={isDrawerCollapsed
+                  ? classes.drawerCollapsed
+                  : classes.drawer} data-test="navigation">
                   <Hidden smUp implementation="js">
                     <Navigator
                       variant="temporary"
                       open={this.state.mobileOpen}
                       onClose={this.handleDrawerToggle}
-                      onCollapseDrawer={this.handleCollapseDrawer}
+                      onCollapseDrawer={(open = null) => this.handleCollapseDrawer(open)}
                       isDrawerCollapsed={isDrawerCollapsed}
                     />
                   </Hidden>
                   <Hidden xsDown implementation="css">
                     <Navigator
-                      onCollapseDrawer={this.handleCollapseDrawer}
+                      onCollapseDrawer={(open = null) => this.handleCollapseDrawer(open)}
                       isDrawerCollapsed={isDrawerCollapsed} />
                   </Hidden>
                 </nav>
                 <div className={classes.appContent}>
-                  <Header onDrawerToggle={this.handleDrawerToggle} />
                   <SnackbarProvider
-                    anchorOrigin={{
-                      vertical: 'top',
-                      horizontal: 'right',
+                    anchorOrigin={{ vertical : 'bottom',
+                      horizontal : 'right', }}
+                    iconVariant = {{
+                      success : <CheckCircle style={{ marginRight : "0.5rem" }} />,
+                      error : <Error style={{ marginRight : "0.5rem" }} />,
+                      warning : <Warning style={{ marginRight : "0.5rem" }} />,
+                      info : <Info style={{ marginRight : "0.5rem" }} />
+                    }}
+                    classes={{
+                      variantSuccess : classes.notifSuccess,
+                      variantError : classes.notifError,
+                      variantWarning : classes.notifWarn,
+                      variantInfo : classes.notifInfo,
                     }}
                     maxSnack={10}
                   >
                     <MesheryProgressBar />
+                    <Header onDrawerToggle={this.handleDrawerToggle} onDrawerCollapse={isDrawerCollapsed}/>
                     <main className={classes.mainContent}>
                       <MuiPickersUtilsProvider utils={MomentUtils}>
-                        <Paper className={classes.paper}>
-                          <Component pageContext={this.pageContext} {...pageProps} />
-                        </Paper>
+                        <Component pageContext={this.pageContext} {...pageProps} />
                       </MuiPickersUtilsProvider>
                     </main>
                   </SnackbarProvider>
@@ -422,11 +248,7 @@ class MesheryApp extends App {
   }
 }
 
-MesheryApp.propTypes = {
-  classes: PropTypes.object.isRequired,
-};
+MesheryApp.propTypes = { classes : PropTypes.object.isRequired, };
 
-export default withStyles(styles)(withRedux(makeStore, {
-  serializeState: state => state.toJS(),
-  deserializeState: state => fromJS(state)
-})(MesheryApp));
+export default withStyles(styles)(withRedux(makeStore, { serializeState : state => state.toJS(),
+  deserializeState : state => fromJS(state) })(MesheryApp));

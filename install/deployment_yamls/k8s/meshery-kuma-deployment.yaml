@@ -20,9 +20,10 @@ spec:
       labels:
         io.kompose.service: meshery-kuma
     spec:
-      serviceAccount: meshery
+      serviceAccount: meshery-server
       containers:
       - image: layer5/meshery-kuma:stable-latest
+        imagePullPolicy: Always
         name: meshery-kuma
         ports:
         - containerPort: 10007

@@ -3,19 +3,31 @@ package handlers
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"path"
 
-	"k8s.io/client-go/rest"
+	// for GKE kube API authentication
+	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
-
-	"os"
 
 	"github.com/layer5io/meshery/helpers"
 	"github.com/layer5io/meshery/models"
+	"github.com/layer5io/meshery/models/pattern/core"
+	"github.com/layer5io/meshkit/logger"
+	"github.com/layer5io/meshkit/models/oam/core/v1alpha1"
+	"github.com/layer5io/meshkit/utils"
+	mesherykube "github.com/layer5io/meshkit/utils/kubernetes"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
+)
+
+var (
+	ErrInvalidKubeConfig     = fmt.Errorf("given file is not a valid Kubernetes config file, please try again")
+	ErrInvalidK8sContextName = fmt.Errorf("given context name is not valid, please try again with a valid value")
 )
 
 // K8SConfigHandler is used for persisting kubernetes config and context info
@@ -35,136 +47,122 @@ func (h *Handler) K8SConfigHandler(w http.ResponseWriter, req *http.Request, pre
 	}
 }
 
+// swagger:route POST /api/system/kubernetes SystemAPI idPostK8SConfig
+// Handle POST request for Kubernetes Config
+//
+// Used to add kubernetes config to System
+// responses:
+// 	200: k8sConfigRespWrapper
+
 func (h *Handler) addK8SConfig(user *models.User, prefObj *models.Preference, w http.ResponseWriter, req *http.Request, provider models.Provider) {
 	_ = req.ParseMultipartForm(1 << 20)
 
 	inClusterConfig := req.FormValue("inClusterConfig")
 	logrus.Debugf("inClusterConfig: %s", inClusterConfig)
 
-	var k8sConfigBytes []byte
-	var contextName string
-	kc := &models.K8SConfig{
-		InClusterConfig: (inClusterConfig != ""),
-	}
+	var kc *models.K8SConfig
+	var gerr error
 
-	if inClusterConfig == "" {
+	if inClusterConfig != "" {
+		kc, gerr = h.setupK8sConfig(true, nil, "")
+	} else {
 		k8sfile, _, err := req.FormFile("k8sfile")
 		if err != nil {
-			logrus.Errorf("error getting k8s file: %v", err)
-			http.Error(w, "Unable to get Kubernetes config file", http.StatusBadRequest)
+			logrus.Error(ErrFormFile(err))
+			http.Error(w, ErrFormFile(err).Error(), http.StatusBadRequest)
 			return
 		}
 		defer func() {
 			_ = k8sfile.Close()
 		}()
-		k8sConfigBytes, err = ioutil.ReadAll(k8sfile)
+		k8sConfigBytes, err := io.ReadAll(k8sfile)
 		if err != nil {
-			logrus.Errorf("error reading config: %v", err)
-			http.Error(w, "Unable to read the Kubernetes config file, please try again", http.StatusBadRequest)
+			logrus.Error(ErrReadConfig(err))
+			http.Error(w, ErrReadConfig(err).Error(), http.StatusBadRequest)
 			return
 		}
 
-		contextName = req.FormValue("contextName")
-
-		ccfg, err := clientcmd.Load(k8sConfigBytes)
-		if err != nil {
-			logrus.Errorf("error parsing k8s config: %v", err)
-			http.Error(w, "Given file is not a valid Kubernetes config file, please try again", http.StatusBadRequest)
-			return
-		}
-		logrus.Debugf("current context: %s, contexts from config file: %v, clusters: %v", ccfg.CurrentContext, ccfg.Contexts, ccfg.Clusters)
-		if contextName != "" {
-			k8sCtx, ok := ccfg.Contexts[contextName]
-			if !ok || k8sCtx == nil {
-				logrus.Errorf("error specified context not found")
-				http.Error(w, "Given context name is not valid, please try again with a valid value", http.StatusBadRequest)
-				return
-			}
-			ccfg.CurrentContext = contextName
-		}
-
-		kc.Config = k8sConfigBytes
-		kc.ContextName = ccfg.CurrentContext
-
-		k8sContext, ok := ccfg.Contexts[ccfg.CurrentContext]
-		if ok {
-			k8sServer, ok := ccfg.Clusters[k8sContext.Cluster]
-			if ok {
-				kc.Server = k8sServer.Server
-			}
-		}
+		kc, gerr = h.setupK8sConfig(false, k8sConfigBytes, req.FormValue("contextName"))
 	}
-	kc.ClusterConfigured = true
+
+	if gerr != nil {
+		status := http.StatusInternalServerError
+		if gerr == ErrInvalidK8sContextName || gerr == ErrInvalidKubeConfig {
+			status = http.StatusBadRequest
+		}
+
+		logrus.Errorf("failed to get K8s Config: %s", gerr)
+		http.Error(w, gerr.Error(), status)
+		return
+	}
+
 	prefObj.K8SConfig = kc
-
-	var err error
-	prefObj.K8SConfig.ServerVersion, err = helpers.FetchKubernetesVersion(kc.Config, kc.ContextName)
-	if err != nil {
-		http.Error(w, "unable to ping the Kubernetes server", http.StatusInternalServerError)
-		return
-	}
-
-	prefObj.K8SConfig.Nodes, err = helpers.FetchKubernetesNodes(kc.Config, kc.ContextName)
-	if err != nil {
-		http.Error(w, "unable to fetch nodes metadata from the Kubernetes server", http.StatusInternalServerError)
-		return
-	}
-
-	if err = provider.RecordPreferences(req, user.UserID, prefObj); err != nil {
-		logrus.Errorf("unable to save session: %v", err)
-		http.Error(w, "unable to save session", http.StatusInternalServerError)
+	if err := provider.RecordPreferences(req, user.UserID, prefObj); err != nil {
+		logrus.Error(ErrRecordPreferences(err))
+		http.Error(w, ErrRecordPreferences(err).Error(), http.StatusInternalServerError)
 		return
 	}
 
 	kc.Config = nil
-
-	if err = json.NewEncoder(w).Encode(kc); err != nil {
-		logrus.Errorf("error marshaling data: %v", err)
-		http.Error(w, "unable to retrieve the requested data", http.StatusInternalServerError)
+	if err := json.NewEncoder(w).Encode(kc); err != nil {
+		logrus.Error(ErrMarshal(err, "kubeconfig"))
+		http.Error(w, ErrMarshal(err, "kubeconfig").Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
+// swagger:route DELETE /api/system/kubernetes SystemAPI idDeleteK8SConfig
+// Handle DELETE request for Kubernetes Config
+//
+// Used to delete kubernetes config to System
+// responses:
+// 	200:
+
 func (h *Handler) deleteK8SConfig(user *models.User, prefObj *models.Preference, w http.ResponseWriter, req *http.Request, provider models.Provider) {
 	prefObj.K8SConfig = nil
+	ctxID := "0" //To be replaced with actual context ID after multi context support
+	go core.DeleteK8sWorkloads(ctxID)
 	err := provider.RecordPreferences(req, user.UserID, prefObj)
 	if err != nil {
-		logrus.Errorf("unable to save session: %v", err)
-		http.Error(w, "unable to save session", http.StatusInternalServerError)
+		logrus.Error(ErrRecordPreferences(err))
+		http.Error(w, ErrRecordPreferences(err).Error(), http.StatusInternalServerError)
 		return
 	}
 	_, _ = w.Write([]byte("{}"))
 }
 
+// swagger:route POST /api/system/kubernetes/contexts SystemAPI idPostK8SContexts
+// Handle POST requests for Kubernetes Context list
+//
+// Returns the context list for a given k8s config
+// responses:
+// 	200: k8sContextsRespWrapper
+
 // GetContextsFromK8SConfig returns the context list for a given k8s config
 func (h *Handler) GetContextsFromK8SConfig(w http.ResponseWriter, req *http.Request) {
-	// if req.Method != http.MethodPost {
-	// 	w.WriteHeader(http.StatusNotFound)
-	// 	return
-	// }
 	_ = req.ParseMultipartForm(1 << 20)
 	var k8sConfigBytes []byte
 
 	k8sfile, _, err := req.FormFile("k8sfile")
 	if err != nil {
-		logrus.Errorf("error getting k8s file: %v", err)
-		http.Error(w, "Unable to get Kubernetes config file", http.StatusBadRequest)
+		logrus.Error(ErrFormFile(err))
+		http.Error(w, ErrFormFile(err).Error(), http.StatusBadRequest)
 		return
 	}
 	defer func() {
 		_ = k8sfile.Close()
 	}()
-	k8sConfigBytes, err = ioutil.ReadAll(k8sfile)
+	k8sConfigBytes, err = io.ReadAll(k8sfile)
 	if err != nil {
-		logrus.Errorf("error reading config: %v", err)
-		http.Error(w, "Unable to read the Kubernetes config file, please try again", http.StatusBadRequest)
+		logrus.Error(ErrReadConfig(err))
+		http.Error(w, ErrReadConfig(err).Error(), http.StatusBadRequest)
 		return
 	}
 
 	ccfg, err := clientcmd.Load(k8sConfigBytes)
 	if err != nil {
-		logrus.Errorf("error parsing k8s config: %v", err)
-		http.Error(w, "Given file is not a valid Kubernetes config file, please try again", http.StatusBadRequest)
+		logrus.Error(ErrLoadConfig(err))
+		http.Error(w, ErrLoadConfig(err).Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -180,58 +178,42 @@ func (h *Handler) GetContextsFromK8SConfig(w http.ResponseWriter, req *http.Requ
 
 	err = json.NewEncoder(w).Encode(contexts)
 	if err != nil {
-		logrus.Errorf("error marshaling data: %v", err)
-		http.Error(w, "unable to retrieve the requested data", http.StatusInternalServerError)
+		logrus.Error(ErrMarshal(err, "kube-context"))
+		http.Error(w, ErrMarshal(err, "kube-context").Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
 func (h *Handler) loadInClusterK8SConfig() (*models.K8SConfig, error) {
-	// try to load k8s config from incluster config
-	_, err := rest.InClusterConfig()
-	if err != nil {
-		err = errors.Wrap(err, "error parsing incluster k8s config")
-		logrus.Error(err)
-		return nil, err
-	}
-	return &models.K8SConfig{
-		InClusterConfig: true,
-		// ContextName:       ccfg.CurrentContext,
-		ClusterConfigured: true,
-	}, nil
+	return h.setupK8sConfig(true, nil, "")
 }
 
 func (h *Handler) loadK8SConfigFromDisk() (*models.K8SConfig, error) {
-	// // try to load k8s config from local disk
+	// try to load k8s config from local disk
 	configFile := path.Join(h.config.KubeConfigFolder, "config") // is it ok to hardcode the name 'config'?
 	if _, err := os.Stat(configFile); err != nil {
-		// if os.IsNotExist(err) {
-		// 	logrus.Warnf("%s location does not exist", configFile)
-		// 	return nil
-		// } else {
-		err = errors.Wrapf(err, "unable to open file: %s", configFile)
-		logrus.Error(err)
-		return nil, err
-		// }
+		h.log.Error(ErrOpenFile(configFile))
+		return nil, ErrOpenFile(configFile)
 	}
-	k8sConfigBytes, err := ioutil.ReadFile(configFile)
+	k8sConfig, err := utils.ReadFileSource(fmt.Sprintf("file://%s", configFile))
 	if err != nil {
-		err = errors.Wrapf(err, "error reading file: %s", configFile)
-		logrus.Error(err)
+		h.log.Error(err)
 		return nil, err
 	}
-	ccfg, err := clientcmd.Load(k8sConfigBytes)
+
+	ncfg, err := helpers.FlattenMinifyKubeConfig([]byte(k8sConfig))
 	if err != nil {
-		err = errors.Wrap(err, "error parsing k8s config")
-		logrus.Error(err)
-		return nil, err
+		h.log.Error(ErrLoadConfig(err))
+		return nil, ErrLoadConfig(err)
 	}
-	return &models.K8SConfig{
-		InClusterConfig:   false,
-		Config:            k8sConfigBytes,
-		ContextName:       ccfg.CurrentContext,
-		ClusterConfigured: true,
-	}, nil
+
+	ccfg, err := clientcmd.Load(ncfg)
+	if err != nil {
+		h.log.Error(ErrLoadConfig(err))
+		return nil, ErrLoadConfig(err)
+	}
+
+	return h.setupK8sConfig(false, ncfg, ccfg.CurrentContext)
 }
 
 // ATM used only in the SessionSyncHandler
@@ -242,7 +224,7 @@ func (h *Handler) checkIfK8SConfigExistsOrElseLoadFromDiskOrK8S(req *http.Reques
 			AnonymousPerfResults: true,
 		}
 	}
-	if prefObj.K8SConfig == nil {
+	if prefObj.K8SConfig == nil || h.config.KubeClient == nil {
 		kc, err := h.loadK8SConfigFromDisk()
 		if err != nil {
 			kc, err = h.loadInClusterK8SConfig()
@@ -251,15 +233,30 @@ func (h *Handler) checkIfK8SConfigExistsOrElseLoadFromDiskOrK8S(req *http.Reques
 			}
 		}
 		prefObj.K8SConfig = kc
+		if viper.Get("SKIP_COMP_GEN") != "TRUE" {
+			ctxID := "0" // To be replaced after multi-context support
+			go func(l logger.Handler, config []byte, ctx string) {
+				err := registerK8sComponents(h.log, prefObj.K8SConfig.Config, ctxID)
+				if err != nil {
+					logrus.Error(err)
+				}
+			}(h.log, prefObj.K8SConfig.Config, ctxID)
+		}
 		err = provider.RecordPreferences(req, user.UserID, prefObj)
 		if err != nil {
-			err = errors.Wrapf(err, "unable to persist k8s config")
-			logrus.Error(err)
-			return err
+			logrus.Error(ErrRecordPreferences(err))
+			return ErrRecordPreferences(err)
 		}
 	}
 	return nil
 }
+
+// swagger:route GET /api/system/kubernetes/ping SystemAPI idGetKubernetesPing
+// Handle GET request for Kubernetes ping
+//
+// Fetches server version to simulate ping
+// responses:
+// 	200:
 
 // KubernetesPingHandler - fetches server version to simulate ping
 func (h *Handler) KubernetesPingHandler(w http.ResponseWriter, req *http.Request, prefObj *models.Preference, user *models.User, provider models.Provider) {
@@ -268,41 +265,101 @@ func (h *Handler) KubernetesPingHandler(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	version, err := helpers.FetchKubernetesVersion(prefObj.K8SConfig.Config, prefObj.K8SConfig.ContextName)
+	version, err := h.config.KubeClient.KubeClient.ServerVersion()
 	if err != nil {
-		err = errors.Wrap(err, "unable to ping Kubernetes")
-		logrus.Error(err)
-		http.Error(w, "unable to ping Kubernetes", http.StatusInternalServerError)
+		logrus.Error(ErrKubeVersion(err))
+		http.Error(w, ErrKubeVersion(err).Error(), http.StatusInternalServerError)
 		return
 	}
+
 	if err = json.NewEncoder(w).Encode(map[string]string{
-		"server_version": version,
+		"server_version": version.String(),
 	}); err != nil {
 		err = errors.Wrap(err, "unable to marshal the payload")
-		logrus.Error(err)
-		http.Error(w, "unable to marshal the payload", http.StatusInternalServerError)
+		logrus.Error(ErrMarshal(err, "kube-server-version"))
+		http.Error(w, ErrMarshal(err, "kube-server-version").Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
-// InstalledMeshesHandler - scans and tries to find out the installed meshes
-func (h *Handler) InstalledMeshesHandler(w http.ResponseWriter, req *http.Request, prefObj *models.Preference, user *models.User, provider models.Provider) {
-	if prefObj.K8SConfig == nil {
-		_, _ = w.Write([]byte("{}"))
-		return
+func (h *Handler) setupK8sConfig(inClusterConfig bool, k8sConfigBytes []byte, contextName string) (*models.K8SConfig, error) {
+	kc := &models.K8SConfig{
+		InClusterConfig: inClusterConfig,
+		Config:          k8sConfigBytes,
+		ContextName:     contextName,
 	}
 
-	installedMeshes, err := helpers.ScanKubernetes(prefObj.K8SConfig.Config, prefObj.K8SConfig.ContextName)
+	mclient, err := mesherykube.New(k8sConfigBytes)
 	if err != nil {
-		err = errors.Wrap(err, "unable to scan Kubernetes")
-		logrus.Error(err)
-		http.Error(w, "unable to scan Kubernetes", http.StatusInternalServerError)
-		return
+		kc.ClusterConfigured = false
+		return nil, err
 	}
-	if err = json.NewEncoder(w).Encode(installedMeshes); err != nil {
-		err = errors.Wrap(err, "unable to marshal the payload")
-		logrus.Error(err)
-		http.Error(w, "unable to marshal the payload", http.StatusInternalServerError)
-		return
+
+	kc.Server = mclient.RestConfig.Host
+
+	version, err := mclient.KubeClient.ServerVersion()
+	if err != nil {
+		kc.ClusterConfigured = false
+		return nil, ErrKubeVersion(err)
 	}
+	kc.ServerVersion = version.String()
+
+	ccfg, err := clientcmd.Load(k8sConfigBytes)
+	if err != nil {
+		h.log.Error(ErrLoadConfig(err))
+		return nil, ErrLoadConfig(err)
+	}
+
+	kc.Contexts = []models.K8SContext{}
+	for name, ctx := range ccfg.Contexts {
+		kc.Contexts = append(kc.Contexts, models.K8SContext{
+			ContextName:      name,
+			ClusterName:      ctx.Cluster,
+			IsCurrentContext: name == contextName,
+		})
+	}
+
+	//kc.Nodes, err = helpers.FetchKubernetesNodes(kc.Config, kc.ContextName)
+	//if err != nil {
+	//	return nil, fmt.Errorf("unable to fetch nodes metadata from the Kubernetes server")
+	//}
+	*h.config.KubeClient = *mclient
+	kc.ClusterConfigured = true
+	return kc, nil
+}
+func registerK8sComponents(l logger.Handler, config []byte, ctx string) error {
+	l.Info("Starting to register k8s native components")
+	man, err := core.GetK8Components(config, ctx)
+	if err != nil {
+		return err
+	}
+	if man == nil {
+		l.Error(errors.New("Could not get k8s components"))
+		return err
+	}
+	for i, def := range man.Definitions {
+		var ord core.WorkloadCapability
+		ord.Metadata = make(map[string]string)
+		ord.Metadata["io.meshery.ctxid"] = ctx
+		ord.Metadata["adapter.meshery.io/name"] = "kubernetes"
+		ord.Host = "<none-local>"
+		ord.OAMRefSchema = man.Schemas[i]
+
+		var definition v1alpha1.WorkloadDefinition
+		err := json.Unmarshal([]byte(def), &definition)
+		if err != nil {
+			return err
+		}
+		ord.OAMDefinition = definition
+		content, err := json.Marshal(ord)
+		if err != nil {
+			return err
+		}
+		err = core.RegisterWorkload(content)
+		if err != nil {
+			return err
+		}
+	}
+	l.Info("Registration of k8s native components completed")
+	return nil
 }

@@ -1,7 +1,8 @@
 # envs
 GIT_VERSION=$(shell git describe --tags `git rev-list --tags --max-count=1`)
 GIT_COMMITSHA=$(shell git rev-list -1 HEAD)
-LDFLAGS="-w -s -X github.com/layer5io/meshery/mesheryctl/internal/cli/root.version=${GIT_VERSION} -X github.com/layer5io/meshery/mesheryctl/internal/cli/root.commitsha=${GIT_COMMITSHA}"
+RELEASE_CHANNEL="edge"
+LDFLAGS="-w -s -X github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants.version=${GIT_VERSION} -X github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants.commitsha=${GIT_COMMITSHA} -X github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants.releasechannel=${RELEASE_CHANNEL}"
 
 make:
 	go build -ldflags=${LDFLAGS} -o mesheryctl cmd/mesheryctl/main.go
@@ -36,3 +37,7 @@ $(BINNAME_WINDOWS):
 .PHONY: clean
 clean:
 	rm -rf $(OUTDIR)
+
+.PHONY: error
+error:
+	go run github.com/layer5io/meshkit/cmd/errorutil -d . analyze -i ./helpers -o ./helpers

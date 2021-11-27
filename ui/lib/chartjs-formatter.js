@@ -1,4 +1,4 @@
-/* eslint block-scoped-var: 0 */ 
+/* eslint block-scoped-var: 0 */
 export const linearXAxe = {
   type: 'linear',
   scaleLabel: {
@@ -9,7 +9,7 @@ export const linearXAxe = {
       beginAtZero: true
     }
   }
-}
+};
 export const logXAxe = {
   type: 'logarithmic',
   scaleLabel: {
@@ -19,10 +19,10 @@ export const logXAxe = {
   ticks: {
     // min: dataH[0].x, // newer chart.js are ok with 0 on x axis too
     callback: function (tick, index, ticks) {
-      return tick.toLocaleString()
+      return tick.toLocaleString();
     }
   }
-}
+};
 export const linearYAxe = {
   id: 'H',
   type: 'linear',
@@ -33,7 +33,7 @@ export const linearYAxe = {
     display: true,
     labelString: 'Count'
   }
-}
+};
 export const logYAxe = {
   id: 'H',
   type: 'logarithmic',
@@ -42,108 +42,281 @@ export const logYAxe = {
     // min: 1, // log mode works even with 0s
     // Needed to not get scientific notation display:
     callback: function (tick, index, ticks) {
-      return tick.toString()
+      return tick.toString();
     }
   },
   scaleLabel: {
     display: true,
     labelString: 'Count (log scale)'
   }
+};
+
+/**
+ * getMetadata takes in the test data and returns an object
+ * with partially computed data and a "display" field
+ */
+export function getMetadata(rawdata,res) {
+  return {
+    title : {
+      display : {
+        key : 'Title',
+        // value : res.Labels.split(' -_- ')?.[0] || "No Title"
+        value : (rawdata ? rawdata[0].name : res.Labels.split(' -_- ')?.[0]) || "No Title"
+      }
+    },
+    url : {
+      display : {
+        key : 'URL',
+        value : (rawdata ? rawdata[0].runner_results.URL: res.Labels.split(' -_- ')?.[1]) || "No URL"
+      }
+    },
+    startTime : {
+      display : {
+        key : 'Start Time',
+        value : formatDate(res.StartTime)
+      }
+    },
+    minimum : {
+      display : {
+        key : 'Minimum',
+        value : `${myRound(1000.0 * res.DurationHistogram.Min, 3)} ms`
+      }
+    },
+    average : {
+      display : {
+        key : 'Average',
+        value : `${myRound(1000.0 * res.DurationHistogram.Avg, 3)} ms`
+      }
+    },
+    maximum : {
+      display : {
+        key : 'Maximum',
+        value : `${myRound(1000.0 * res.DurationHistogram.Max, 3)} ms`
+      }
+    },
+    qps : {
+      display : {
+        key : "QPS",
+        value : `Achieved ${myRound(res.ActualQPS, 1)} (Requested ${res?.RequestedQPS})`,
+      }
+    },
+    numberOfConnections : {
+      display : {
+        key : 'Number Of Connections',
+        value : res.NumThreads,
+      }
+    },
+    duration : {
+      display : {
+        key : 'Duration',
+        value : `Achieved ${myRound(res.ActualDuration / 1e9, 1)} (Requested ${res.RequestedDuration})`,
+      }
+    },
+    errors : {
+      display : {
+        key : 'Errors',
+        value : (() => {
+          const status = res.RetCodes?.[200] || res.RetCodes?.SERVING || 0;
+          const total = res.DurationHistogram.Count;
+
+          if (status !== total) {
+            if (status) return myRound(100.0 * (total - status) / total, 2) + '% errors';
+
+            return "100% errors!";
+          }
+
+          return "No Errors";
+        })(),
+      }
+    },
+    percentiles : {
+      display : {
+        key : 'Percentiles',
+        value : res.DurationHistogram?.Percentiles?.map(p => {
+          return {
+            display : {
+              key : `p${p.Percentile}`,
+              value : `${myRound(1000 * p.Value, 2)} ms`
+            }
+          }
+        }),
+      }
+    },
+    kubernetes : {
+      display : {
+        hide : !res.kubernetes,
+        key : "Kuberenetes",
+        value : [
+          {
+            display : {
+              key : "Server Version",
+              value : res.kubernetes?.server_version
+            }
+          },
+          {
+            display : {
+              key : "Nodes",
+              value : res.kubernetes?.nodes?.map((node, i) => {
+                return {
+                  display : {
+                    key : `Node ${i + 1}`,
+                    value : [
+                      {
+                        display : {
+                          key : "Hostname",
+                          value : node?.hostname,
+                        }
+                      },
+                      {
+                        display : {
+                          key : "CPU",
+                          value : node?.allocatable_cpu,
+                        }
+                      },
+                      {
+                        display : {
+                          key : "Memory",
+                          value : node?.allocatable_memory,
+                        }
+                      },
+                      {
+                        display : {
+                          key : "Arch",
+                          value : node?.architecture,
+                        }
+                      },
+                      {
+                        display : {
+                          key : "OS",
+                          value : node?.os_image,
+                        }
+                      },
+                      {
+                        display : {
+                          key : "Kubelet Version",
+                          value : node?.kubelet_version,
+                        }
+                      },
+                      {
+                        display : {
+                          key : "Container runtime",
+                          value : node?.container_runtime_version,
+                        }
+                      },
+                    ]
+                  }
+                }
+              })
+            }
+          },
+        ],
+      }
+    }
+  };
 }
-  
-export function makeTitle (res) {
-  var title = []
+
+export function makeTitle (rawdata,res) {
+  var title = [];
   if (res.Labels !== '') {
     if (res.URL) { // http results
       // title.push(res.Labels + ' - ' + res.URL + ' - ' + formatDate(res.StartTime))
       // title.push(res.URL + ' - ' + formatDate(res.StartTime))
-      title.push(res.Labels + ' - ' + formatDate(res.StartTime))
+      console.log(res.Labels);
+      var labels = res.Labels.split(' -_- ');
+      // title.push(`Labels: ${labels.map(item => item + '\n')}`)
+      title.push(`Title: ${rawdata ? rawdata[0].name : labels[0]}`);
+      title.push(`URL: ${rawdata ? rawdata[0].runner_results.URL : labels[1]}`);
+      title.push(`Start Time: ${formatDate(res.StartTime)}`);
     } else { // grpc results
-      title.push(res.Destination + ' - ' + formatDate(res.StartTime))
+      title.push(`Destination: ${res.Destination}`);
+      title.push(`Start Time: ${formatDate(res.StartTime)}`);
     }
   }
-  var percStr = 'min ' + myRound(1000.0 * res.DurationHistogram.Min, 3) + ' ms, average ' + myRound(1000.0 * res.DurationHistogram.Avg, 3) + ' ms'
+  title.push(`Minimum: ${myRound(1000.0 * res.DurationHistogram.Min, 3)} ms`);
+  title.push(`Average: ${myRound(1000.0 * res.DurationHistogram.Avg, 3)} ms`);
+  title.push(`Maximum: ${myRound(1000.0 * res.DurationHistogram.Max, 3)} ms`);
+  var percStr = `Minimum: ${myRound(1000.0 * res.DurationHistogram.Min, 3)} ms \nAverage: ${myRound(1000.0 * res.DurationHistogram.Avg, 3)} ms \nMaximum: ${myRound(1000.0 * res.DurationHistogram.Max, 3)} ms\n`;
+  var percStr_2 = 'Percentiles: ';
   if (res.DurationHistogram.Percentiles) {
     for (var i = 0; i < res.DurationHistogram.Percentiles.length; i++) {
-      var p = res.DurationHistogram.Percentiles[i]
-      percStr += ', p' + p.Percentile + ' ' + myRound(1000 * p.Value, 2) + ' ms'
+      var p = res.DurationHistogram.Percentiles[i];
+      percStr_2 += `p${p.Percentile}: ${myRound(1000 * p.Value, 2)} ms; `;
+      percStr += `p${p.Percentile}: ${myRound(1000 * p.Value, 2)} ms; `;
     }
+    percStr=percStr.slice(0,-2);
   }
-  percStr += ', max ' + myRound(1000.0 * res.DurationHistogram.Max, 3) + ' ms'
   var statusOk = typeof res.RetCodes !== 'undefined' && res.RetCodes !== null?res.RetCodes[200]:0;
   if (!statusOk) { // grpc results
-    statusOk = typeof res.RetCodes !== 'undefined' && res.RetCodes !== null?res.RetCodes["SERVING"]:0;
+    statusOk = typeof res.RetCodes !== 'undefined' && res.RetCodes !== null?res.RetCodes.SERVING:0;
   }
-  var total = res.DurationHistogram.Count
-  var errStr = 'no error'
+  var total = res.DurationHistogram.Count;
+  var errStr = 'No Error';
   if (statusOk !== total) {
     if (statusOk) {
-      errStr = myRound(100.0 * (total - statusOk) / total, 2) + '% errors'
+      errStr = myRound(100.0 * (total - statusOk) / total, 2) + '% errors';
     } else {
-      errStr = '100% errors!'
+      errStr = '100% errors!';
     }
   }
-  title.push('Response time histogram at ' + res.RequestedQPS + ' target qps (' +
-          myRound(res.ActualQPS, 1) + ' actual) ' + res.NumThreads + ' connections for ' +
-          res.RequestedDuration + ' (actual time ' + myRound(res.ActualDuration / 1e9, 1) + 's), ' +
-          errStr)
-  title.push(percStr)
-
+  title.push(`Target QPS: ${res.RequestedQPS} ( Actual QPS: ${myRound(res.ActualQPS, 1)} )`);
+  title.push(`No of Connections: ${res.NumThreads}`);
+  title.push(`Requested Duration: ${res.RequestedDuration} ( Actual Duration: ${myRound(res.ActualDuration / 1e9, 1)} )`);
+  title.push(`Errors: ${ errStr }`);
+  title.push(percStr_2);
   if(res.kubernetes){
-    title.push(`\nKubernetes server version: ${res.kubernetes.server_version}`);
-    title.push("\nNodes:");
+    title.push(`Kubernetes server version: ${res.kubernetes.server_version}`);
+    title.push("Nodes:");
     res.kubernetes.nodes.forEach((node, ind) => {
-      title.push(`\nNode ${ind+1} - Hostname: ${node.hostname}, CPU: ${node.allocatable_cpu}, Memory: ${node.allocatable_memory}, ` +
-                    `Arch: ${node.architecture} OS: ${node.os_image}, \n` +
-                    `Kubelet version: ${node.kubelet_version}, Container runtime: ${node.container_runtime_version}`);
+      title.push(`Node ${ind+1} - \nHostname: ${node.hostname} \nCPU: ${node.allocatable_cpu} \nMemory: ${node.allocatable_memory} \nArch: ${node.architecture} \nOS: ${node.os_image}
+                    \nKubelet version: ${node.kubelet_version} \nContainer runtime: ${node.container_runtime_version}`);
     });
   }
 
-  return title
+  return title;
 }
-  
-export function fortioResultToJsChartData (res) {
+
+export function fortioResultToJsChartData (rawdata,res) {
   var dataP = [{
     x: 0.0,
     y: 0.0
-  }]
-  var len = res.DurationHistogram.Data.length
-  var prevX = 0.0
-  var prevY = 0.0
+  }];
+  var len = res.DurationHistogram.Data.length;
+  var prevX = 0.0;
+  var prevY = 0.0;
   for (var i = 0; i < len; i++) {
-    var it = res.DurationHistogram.Data[i]
-    var x = myRound(1000.0 * it.Start)
+    var it = res.DurationHistogram.Data[i];
+    var x = myRound(1000.0 * it.Start);
     if (i === 0) {
       // Extra point, 1/N at min itself
       dataP.push({
         x: x,
         // y: myRound(100.0 / res.DurationHistogram.Count, 3)
         y: myRound(100.0 / res.DurationHistogram.Count, 2)
-      })
+      });
     } else {
       if (prevX !== x) {
         dataP.push({
           x: x,
           y: prevY
-        })
+        });
       }
     }
-    x = myRound(1000.0 * it.End)
+    x = myRound(1000.0 * it.End);
     // var y = myRound(it.Percent, 3)
-    var y = myRound(it.Percent, 2)
+    var y = myRound(it.Percent, 2);
     dataP.push({
       x: x,
       y: y
-    })
-    prevX = x
-    prevY = y
+    });
+    prevX = x;
+    prevY = y;
   }
-  var dataH = []
-  var prev = 1000.0 * res.DurationHistogram.Data[0].Start
+  var dataH = [];
+  var prev = 1000.0 * res.DurationHistogram.Data[0].Start;
   for (i = 0; i < len; i++) {
-    it = res.DurationHistogram.Data[i]
-    var startX = 1000.0 * it.Start
-    var endX = 1000.0 * it.End
+    it = res.DurationHistogram.Data[i];
+    var startX = 1000.0 * it.Start;
+    var endX = 1000.0 * it.End;
     if (startX !== prev) {
       dataH.push({
         x: myRound(prev),
@@ -151,7 +324,7 @@ export function fortioResultToJsChartData (res) {
       }, {
         x: myRound(startX),
         y: 0
-      })
+      });
     }
     dataH.push({
       x: myRound(startX),
@@ -159,33 +332,34 @@ export function fortioResultToJsChartData (res) {
     }, {
       x: myRound(endX),
       y: it.Count
-    })
-    prev = endX
+    });
+    prev = endX;
   }
   return {
-    title: makeTitle(res),
+    title: makeTitle(rawdata,res),
+    metadata: getMetadata(rawdata,res),
     dataP: dataP,
     dataH: dataH,
     percentiles: res.DurationHistogram.Percentiles,
-  }
+  };
 }
-  
+
 // export function myRound (v, digits = 6) {
 export function myRound (v, digits = 2) {
-  var p = Math.pow(10, digits)
-  return Math.round(v * p) / p
+  var p = Math.pow(10, digits);
+  return Math.round(v * p) / p;
 }
-  
+
 export function pad (n) {
-  return (n < 10) ? ('0' + n) : n
+  return (n < 10) ? ('0' + n) : n;
 }
-  
+
 export function formatDate (dStr) {
-  var d = new Date(dStr)
+  var d = new Date(dStr);
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
-          pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+          pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
 }
-  
+
 export function makeChart (data) {
   return {
     percentiles: data.percentiles,
@@ -215,6 +389,7 @@ export function makeChart (data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      metadata : data?.metadata,
       title: {
         display: true,
         fontStyle: 'normal',
@@ -240,8 +415,8 @@ export function makeChart (data) {
         ]
       }
     }
-  }
-  
+  };
+
   //     // TODO may need updateChart() if we persist settings even the first time
   // } else {
   //   chart.data.datasets[0].data = data.dataP
@@ -257,9 +432,9 @@ export function makeOverlayChartTitle (titleA, titleB) {
     'A: ' + titleA[0], titleA[1], // Skip 3rd line.
     '',
     'B: ' + titleB[0], titleB[1], // Skip 3rd line.
-  ]
+  ];
 }
-  
+
 export function makeOverlayChart (dataA, dataB) {
   // var chartEl = document.getElementById('chart1')
   // chartEl.style.visibility = 'visible'
@@ -269,7 +444,7 @@ export function makeOverlayChart (dataA, dataB) {
   // deleteSingleChart()
   // deleteMultiChart()
   // var ctx = chartEl.getContext('2d')
-  var title = makeOverlayChartTitle(dataA.title, dataB.title)
+  var title = makeOverlayChartTitle(dataA.title, dataB.title);
   return {
     data: {
       // "Cumulative %" datasets are listed first so they are drawn on top of the histograms.
@@ -314,6 +489,10 @@ export function makeOverlayChart (dataA, dataB) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      metadata: [
+        dataA?.metadata,
+        dataB?.metadata,
+      ],
       title: {
         display: true,
         fontStyle: 'normal',
@@ -339,11 +518,11 @@ export function makeOverlayChart (dataA, dataB) {
         ]
       }
     }
-  }
+  };
   // updateChart(overlayChart)
 }
-  
-export function makeMultiChart (results) {
+
+export function makeMultiChart (rawdata,results) {
   // document.getElementById('running').style.display = 'none'
   // document.getElementById('update').style.visibility = 'hidden'
   // var chartEl = document.getElementById('chart1')
@@ -438,6 +617,7 @@ export function makeMultiChart (results) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      metadata : results?.metadata,
       title: {
         display: true,
         fontStyle: 'normal',
@@ -471,24 +651,24 @@ export function makeMultiChart (results) {
         }]
       }
     }
-  }
+  };
 
   const multiLabel = (res) => {
     var l = formatDate(res.StartTime)
     if (res.Labels !== '') {
       if (res.Labels.indexOf(' -_- ') > -1) {
-        const ls = res.Labels.split(' -_- '); // trying to match this with server side in fortio.go
+        const ls = res.Labels.split('-_-'); // trying to match this with server side in fortio.go
         if (ls.length > 0){
           l += ' - ' + ls[0];
         } else {
           l += ' - ' + res.Labels;
         }
       } else {
-        l += ' - ' + res.Labels
+        l += ' - ' + res.Labels;
       }
     }
     return label_trunc(l);
-  }
+  };
 
   const label_trunc = function(str) {
     if (str.length > length) {
@@ -497,42 +677,42 @@ export function makeMultiChart (results) {
       return str;
     }
   };
-  
+
   const findData = (slot, idx, res, p) => {
     // Not very efficient but there are only a handful of percentiles
-    var pA = res.DurationHistogram.Percentiles
+    var pA = res.DurationHistogram.Percentiles;
     if (!pA) {
       //    console.log('No percentiles in res', res)
-      return
+      return;
     }
     var pN = Number(p)
     for (var i = 0; i < pA.length; i++) {
       if (pA[i].Percentile === pN) {
-        data.data.datasets[slot].data[idx] = 1000.0 * pA[i].Value
-        return
+        data.data.datasets[slot].data[idx] = 1000.0 * pA[i].Value;
+        return;
       }
     }
-    console.log('Not Found', p, pN, pA)
+    console.log('Not Found', p, pN, pA);
     // not found, not set
   }
 
   const fortioAddToMultiResult = (i, res) => {
-    data.data.labels[i] = multiLabel(res)
-    data.data.datasets[0].data[i] = 1000.0 * res.DurationHistogram.Min
-    findData(1, i, res, '50')
-    data.data.datasets[2].data[i] = 1000.0 * res.DurationHistogram.Avg
-    findData(3, i, res, '75')
-    findData(4, i, res, '90')
-    findData(5, i, res, '99')
-    findData(6, i, res, '99.9')
-    data.data.datasets[7].data[i] = 1000.0 * res.DurationHistogram.Max
-    data.data.datasets[8].data[i] = res.ActualQPS
+    data.data.labels[i] = multiLabel(res);
+    data.data.datasets[0].data[i] = 1000.0 * res.DurationHistogram.Min;
+    findData(1, i, res, '50');
+    data.data.datasets[2].data[i] = 1000.0 * res.DurationHistogram.Avg;
+    findData(3, i, res, '75');
+    findData(4, i, res, '90');
+    findData(5, i, res, '99');
+    findData(6, i, res, '99.9');
+    data.data.datasets[7].data[i] = 1000.0 * res.DurationHistogram.Max;
+    data.data.datasets[8].data[i] = res.ActualQPS;
   }
 
   const endMultiChart = (len) => {
-    data.data.labels = data.data.labels.slice(0, len)
+    data.data.labels = data.data.labels.slice(0, len);
     for (var i = 0; i < data.data.datasets.length; i++) {
-      data.data.datasets[i].data = data.data.datasets[i].data.slice(0, len)
+      data.data.datasets[i].data = data.data.datasets[i].data.slice(0, len);
     }
     // mchart.update()
   }

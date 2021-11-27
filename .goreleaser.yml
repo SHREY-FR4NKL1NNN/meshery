@@ -16,8 +16,9 @@ builds:
     - CGO_ENABLED=0
     
   ldflags:
-    - -s -w -X github.com/layer5io/meshery/mesheryctl/internal/cli/root.version={{.Version}}
-    - -s -w -X github.com/layer5io/meshery/mesheryctl/internal/cli/root.commitsha={{.Commit}}
+    - -s -w -X github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants.version={{.Tag}}
+    - -s -w -X github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants.commitsha={{.ShortCommit}}
+    - -s -w -X github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants.releasechannel={{.Env.RELEASE_CHANNEL}}
   # GOOS list to build for.
   # For more info refer to: https://golang.org/doc/install/source#environment
   # Defaults are darwin and linux.
@@ -39,6 +40,10 @@ builds:
   # List of combinations of GOOS + GOARCH + GOARM to ignore.
   ignore:
       - goos: freebsd
+        goarch: arm64
+      - goos: windows
+        goarch: arm
+      - goos: windows
         goarch: arm64
 
 archives:
@@ -77,8 +82,8 @@ brews:
   # same kind. We will probably unify this in the next major version like it is done with scoop.
 
   # Github repository to push the tap to.
-  github:
-    owner: layer5io
+  tap:
+    owner: meshery
     name: homebrew-tap
   
   # Template for the url which is determined by the given Token (github or gitlab)
@@ -111,7 +116,7 @@ brews:
   # If set to auto, the release will not be uploaded to the homebrew tap
   # in case there is an indicator for prerelease in the tag e.g. v1.0.0-rc1
   # Default is false.
-  skip_upload: auto
+  skip_upload: false
 
   # Custom block for brew.
   # Can be used to specify alternate downloads for devel or head releases.
@@ -197,7 +202,7 @@ scoop:
 
   # Repository to push the app manifest to.
   bucket:
-    owner: layer5io
+    owner: meshery
     name: scoop-bucket
 
   # Git author used to commit to the repository.

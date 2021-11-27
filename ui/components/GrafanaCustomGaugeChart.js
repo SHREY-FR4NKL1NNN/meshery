@@ -1,38 +1,29 @@
 import { NoSsr } from '@material-ui/core';
 import makeStyles from '@material-ui/styles/makeStyles';
 
-let bb;
-if (typeof window !== 'undefined') {
-  bb = require('billboard.js');
-}
+import bb, { gauge } from 'billboard.js'
 
 const useStyles = makeStyles({
-  '@global': {
-    '.bb-chart-arcs-background': {
-      fill: '#e0e0e0',
-      stroke: 'none',
-    },
-  },
-  root: {
-    width: '100%',
-    height: '75%',
-    minHeight: '18rem',
-  },
-  error: {
-    color: '#D32F2F',
-    width: '100%',
-    textAlign: 'center',
-    fontSize: '12px',
+  '@global' : { '.bb-chart-arcs-background' : { fill : '#e0e0e0',
+    stroke : 'none', }, },
+  root : { width : '100%',
+    height : '75%',
+    minHeight : '18rem', },
+  error : {
+    color : '#D32F2F',
+    width : '100%',
+    textAlign : 'center',
+    fontSize : '12px',
     // fontFamily: 'Helvetica Nueue',
-    fontWeight: 'bold',
+    fontWeight : 'bold',
   },
-  title: {
-    fontSize: '12px',
-    color: '#666666',
+  title : {
+    fontSize : '12px',
+    color : '#666666',
     // fontFamily: 'Helvetica Nueue',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    width: '100%',
+    fontWeight : 'bold',
+    textAlign : 'center',
+    width : '100%',
   },
 });
 
@@ -66,30 +57,29 @@ export default function GrafanaCustomGaugeChart(props) {
     let gdata = 0; let glabel = '';
     if (data && data.length > 0) {
       const dlind = data[0].length - 1;
-      gdata = data[0][dlind] ? data[0][dlind] : 0;
+      gdata = data[0][dlind]
+        ? data[0][dlind]
+        : 0;
       glabel = data[0][0];
     }
 
     if (chartRef && chartRef !== null) {
-      bbChart = bb.bb.generate({
+      bbChart = bb.generate({
         // oninit: function(args){
         //   console.log(JSON.stringify(args));
         // },
-        bindto: chartRef,
-        data: {
-          columns: [
-            [
-              glabel,
-              gdata,
-            ],
+        bindto : chartRef,
+        data : { columns : [
+          [
+            glabel,
+            gdata,
           ],
-          type: 'gauge',
-        },
-        gauge: {
-          min,
+        ],
+        type : gauge(), },
+        gauge : { min,
           max,
           // units,
-          label: {
+          label : {
             // show: glabel && glabel !== '',
             format(value) {
               return value + units;
@@ -97,24 +87,16 @@ export default function GrafanaCustomGaugeChart(props) {
             extents() {
               // return (isMax ? "Max:" : "Min:") + value;
               return '';
-            },
-          },
+            }, },
           //    width: 39 // for adjusting arc thickness
         },
-        color: {
-          pattern: colors, // the three color levels for the percentage values.
-          threshold: {
+        color : { pattern : colors, // the three color levels for the percentage values.
+          threshold : {
             //            unit: 'value', // percentage is default
             //            max: 200, // 100 is default
-            values: thresholds,
-          },
-        },
-        legend: {
-          show: false,
-        },
-        tooltip: {
-          show: false,
-        },
+            values : thresholds, }, },
+        legend : { show : false, },
+        tooltip : { show : false, },
         // size: {
         //   height: '100%',
         // }

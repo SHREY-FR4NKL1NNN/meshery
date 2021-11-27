@@ -1,4 +1,4 @@
-// Copyright 2019 The Meshery Authors
+// Copyright 2020 Layer5, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@ package system
 import (
 	"fmt"
 
+	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
-	"github.com/pkg/errors"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // resetCmd represents the reset command
@@ -36,12 +37,83 @@ var resetCmd = &cobra.Command{
 	},
 }
 
-// resets meshery config
+// resets meshery config, skips conirmation if skipConfirmation is true
 func resetMesheryConfig() error {
-	log.Info("Meshery resetting...")
-	if err := utils.DownloadFile(utils.DockerComposeFile, fileURL); err != nil {
-		return errors.Wrapf(err, utils.SystemError(fmt.Sprintf("failed to download %s file from %s", utils.DockerComposeFile, fileURL)))
+	userResponse := false
+	if utils.SilentFlag {
+		userResponse = true
+	} else {
+		// ask user for confirmation
+		userResponse = utils.AskForConfirmation("Meshery config file will be reset to system defaults. Are you sure you want to continue")
 	}
-	log.Info("Meshery config (" + utils.DockerComposeFile + ") reset to default settings.")
+	if !userResponse {
+		log.Info("Reset aborted.")
+		return nil
+	}
+
+	// Get viper instance used for context
+	mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
+	if err != nil {
+		return ErrProcessingMctlConfig(err)
+	}
+	// get the platform, channel and the version of the current context
+	// if a temp context is set using the -c flag, use it as the current context
+	if tempContext != "" {
+		err = mctlCfg.SetCurrentContext(tempContext)
+		if err != nil {
+			return ErrSettingTemporaryContext(err)
+		}
+	}
+
+	currCtx, err := mctlCfg.GetCurrentContext()
+	if err != nil {
+		return ErrRetrievingCurrentContext(err)
+	}
+
+	log.Info("Meshery resetting...\n")
+	log.Printf("Current Context: %s", mctlCfg.GetCurrentContextName())
+	log.Printf("Channel: %s", currCtx.GetChannel())
+	log.Printf("Version: %s", currCtx.GetVersion())
+	log.Printf("Platform: %s\n", currCtx.GetPlatform())
+
+	switch currCtx.GetPlatform() {
+	case "docker":
+
+		log.Printf("Fetching default docker-compose file as per current-context: %s...", mctlCfg.GetCurrentContextName())
+		err = utils.DownloadDockerComposeFile(currCtx, true)
+		if err != nil {
+			return ErrDownloadFile(err, utils.DockerComposeFile)
+		}
+
+		err = utils.CreateManifestsFolder()
+
+		if err != nil {
+			return ErrCreateManifestsFolder(err)
+		}
+
+		log.Printf("...fetching Meshery Operator manifests for Kubernetes...")
+		err = utils.DownloadOperatorManifest()
+
+		if err != nil {
+			return ErrDownloadFile(err, "operator manifest")
+		}
+
+		log.Info("...meshconfig (" + utils.DockerComposeFile + ") now reset to default settings.")
+
+	case "kubernetes":
+
+		log.Printf("Fetching Meshery Server and Meshery Operator manifests for  %s context...", mctlCfg.GetCurrentContextName())
+		// fetch the manifest files corresponding to the version specified
+		_, err := utils.FetchManifests(currCtx)
+
+		if err != nil {
+			return err
+		}
+
+		log.Info("...meshconfig has been reset to default settings.")
+
+	default:
+		return fmt.Errorf("the platform %s is not supported currently. The supported platforms are:\ndocker\nkubernetes\nPlease check %s/config.yaml file", currCtx.Platform, utils.MesheryFolder)
+	}
 	return nil
 }

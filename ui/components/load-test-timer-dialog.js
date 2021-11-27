@@ -8,9 +8,7 @@ if (typeof window !== 'undefined') {
 
 class LoadTestTimerDialog extends React.Component {
   render() {
-    const {
-      countDownComplete, t, open,
-    } = this.props;
+    const { countDownComplete, t, open, } = this.props;
     if (!open) {
       return '';
     }
@@ -54,9 +52,11 @@ class LoadTestTimerDialog extends React.Component {
           <MenuItem onClick={this.handleClose}>Logout</MenuItem> */}
 
         <div style={{
-          marginLeft: 'auto',
-          marginRight: 'auto',
-          width: '400px',
+          marginLeft : 'auto',
+          marginRight : 'auto',
+          width : '400px',
+          position : "relative",
+          zIndex : "0"
           // height: '400',
         }}
         >

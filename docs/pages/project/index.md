@@ -1,28 +1,117 @@
 ---
-layout: page
+layout: default
 title: Project
 permalink: project
-description: Meshery Project
+redirect_from: project/
+language: en
+display-title: "false"
+list: exclude
+---
+# Meshery Overview
+
+As the service mesh management plane, Meshery enables the adoption, operation, and management of any service mesh and their workloads. Meshery's powerful performance management functionality is accomplished through implementation of [Service Mesh Performance](https://smp-spec.io) (SMP). Meshery's multi-mesh management functionality leverages [Service Mesh Interface](https://smi-spec.io) (SMI) and Meshery is the conformance tool for SMI. Meshery integrates with Open Application Model (OAM) to enable users to deploy service mesh patterns. Meshery enables operators to deploy WebAssembly filters to Envoy-based data planes. Meshery facilitates learning about functionality and performance of service meshes and incorporates the collection and display of metrics from applications running on or across service meshes.
+
+##### **Meshery as a project and its community**
+
+{% assign sorted_pages = site.pages | sort: "type" | reverse %}
+
+<ul>
+    {% for item in sorted_pages %}
+    {% if item.type=="project" and item.language=="en" -%}
+      <li><a href="{{ site.baseurl }}{{ item.url }}">{{ item.title }}</a>
+      {% if item.description != " " %}
+        -  {{ item.description }}
+      {% endif %}
+      </li>
+      {% endif %}
+    {% endfor %}
+</ul>
+
+{% include toc.html page=project %}
+
 ---
 
-# Layer5 Projects
+## Meshery's Functionality
 
-The Meshery project is maintained by Layer5 community. We are a healthy open source organisation governed by [CNCF's Code of Conduct](https://github.com/cncf/foundation/blob/master/code-of-conduct.md).
+Meshery features can be categorized by:
 
-## Getting involved in the Community
+1. Service Mesh Performance Management
+   - Workload and service mesh performance characterization
+   - Prometheus and Grafana integration
+1. Service Mesh Configuration Management
+   - Configuration best practices
+1. Service Mesh Lifecycle Management
+   - Service mesh provisioning and workload onboarding
+   - Meshery Operator and MeshSync
+   - Service mesh patterns and Open Application Model integration
+1. Data Plane Intelligence
+   - Registry and configuration of WebAssembly filters for Envoy
+1. Service Mesh Interoperability and Federation
+   - Manage multiple service meshes concurrently
+   - Connect to multiple clusters independently
 
-Want to get involved with project, join [our Slack](http://slack.layer5.io) and one of the community members will make sure you are not left out. We always have a role for everyone whether to be a code-writer, a community manager, user, advocate, or just to listen in. Layer5 community is always open and warmly welcomes you. Check out our [community welcome guide](https://docs.google.com/document/d/17OPtDE_rdnPQxmk2Kauhm3GwXF1R5dZ3Cj8qZLKdo5E/edit) for more details.
-If this is your first time making open source contribution, you are in the right place! Check out our [first timers' welcome guide](https://docs.google.com/document/d/1tpg2sLxirozNt3Ofr3GdM002f9rExp74EqrsGZBU710/edit).
+### Meshery is for Developers, Operators, and Product Owners
 
+Whether making a Day 0 adoption choice or maintaining a Day 2 deployment, Meshery has useful capabilities in either circumstance. Targeted audience for Meshery project would be any technology operators that leverage service mesh in their ecosystem; this includes developers, devops engineers, decision makers, architects, and organizations that rely on microservices platform.
 
-Please see our [contributing guide](/docs/project/contributing) for more details.
+### Meshery is for service mesh patterns
 
-## About Layer5
+Meshery integrates with Open Application Model (OAM) to enable users to deploy service mesh patterns.
 
-### Community First
+### Meshery is for performance management
 
-<p>The <a href="https://layer5.io">Layer5</a> community represents the largest collection of service mesh projects and their maintainers in the world.</p>
+Meshery helps users weigh the value of their service mesh deployment against the overhead incurred in running a service mesh. Meshery provides statistical analysis of the request latency and throughput seen across various permutations of your workload, infrastructure and service mesh configuration.
+In addition to request latency and throughput, Meshery also tracks memory and CPU overhead in of the nodes in your cluster. Measure your data plane and control plane against different sets of workloads and infrastructures.
 
-### Open Source First
+Anytime performance questions are to be answered, they are subjective to the specific workload and infrastructure used for measurement. Given this challenge, the Envoy project, for example, refuses to publish performance data because such tests can be:
 
-<p>We build projects to provide learning environments, deployment and operational best practices, performance benchmarks, create documentation, share networking opportunities, and more. Our shared commitment to the open source spirit pushes Layer5 projects forward.</p>
+- Involved
+- Misinterpreted
+
+Beyond the need for performance and overhead data under a permutation of different workloads (applications) and types and sizes of infrastructure resources, the need for cross-project, apple-to-apple comparisons are also desired in order to facilitate a comparison of behavioral differences between service meshes and selection of their use. Individual projects shy from publishing test results of other, competing service meshes. An independent, unbiased, credible analysis is needed.
+
+Meshery is intended to be a vendor and project-neutral utility for uniformly benchmarking the performance of service meshes. Between service mesh and proxy projects (and surprisingly, within a single project), a number of different tools and results exist. Meshery allows you to pick an efficient set of tools for your ecosystem by providing performance evaluation and metrics.
+
+1. By leveraging Meshery you could achieve apples-to-apples performance comparison of service meshes
+1. Track your service mesh performance from release to release.
+1. Understand behavioral differences between service meshes.
+1. Track your application performance from version to version.
+
+<a href="https://raw.githubusercontent.com/layer5io/meshery/master/assets/img/readme/meshery_lifecycle_management.png"><img alt="Layer5 Service Mesh Community" src="{{ site.baseurl }}{% link assets/img/readme/meshery_lifecycle_management.png %}"  width="100%" align="center"/></a>
+Establish a performance benchmark and track performance against this baseline as your environment changes over time.
+
+## Meshery is for any service mesh
+
+Infrastructure diversity is a reality for any enterprise. Whether you're running a single service mesh or multiple types of service meshes, you'll find that Meshery supports your infrastructure diversity (or lack thereof).
+
+### Supported Service Meshes
+
+#### **Stable**
+
+| Service Mesh | Status |
+| :----------- | -----: |
+{% for adapter in site.adapters -%}
+{% if adapter.project_status == "stable" -%}
+| <img src="{{ adapter.image }}" style="width:20px" /> [{{ adapter.name }}]({{ site.baseurl }}{{ adapter.url }}) | {{ adapter.project_status }} |
+{% endif -%}
+{% endfor %}
+
+##### **Beta**
+
+| Service Mesh | Status |
+| :----------- | -----: |
+{% for adapter in site.adapters -%}
+{% if adapter.project_status == "beta" -%}
+| <img src="{{ adapter.image }}" style="width:20px" /> [{{ adapter.name }}]({{ site.baseurl }}{{ adapter.url }}) | {{ adapter.project_status }} |
+{% endif -%}
+{% endfor %}
+
+##### **Alpha** - Service mesh adapters for which we are seeking community-contributed support.
+
+| Service Mesh | Status |
+| :----------- | -----: |
+{% for adapter in site.adapters -%}
+{% if adapter.project_status == "alpha" -%}
+| <img src="{{ adapter.image }}" style="width:20px" /> [{{ adapter.name }}]({{ site.baseurl }}{{ adapter.url }}) | {{ adapter.project_status }} |
+{% endif -%}
+{% endfor %}

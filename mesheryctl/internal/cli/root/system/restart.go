@@ -1,4 +1,4 @@
-// Copyright 2019 The Meshery Authors
+// Copyright 2020 Layer5, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,29 +15,89 @@
 package system
 
 import (
+	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
-	"github.com/pkg/errors"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // restartCmd represents the restart command
 var restartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Stop, then start Meshery",
-	Long:  `Restart all Meshery containers, their instances and their connected volumes.`,
+	Long:  `Restart all Meshery containers / pods.`,
 	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		log.Info("Restarting Meshery...")
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		//Check prerequisite
+		hcOptions := &HealthCheckOptions{
+			IsPreRunE:  true,
+			PrintLogs:  false,
+			Subcommand: cmd.Use,
+		}
+		hc, err := NewHealthChecker(hcOptions)
+		if err != nil {
+			return ErrHealthCheckFailed(err)
+		}
+		// execute healthchecks
+		err = hc.RunPreflightHealthChecks()
+		if err != nil {
+			cmd.SilenceUsage = true
+		}
 
+		return err
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return restart()
+	},
+}
+
+func restart() error {
+	log.Info("Restarting Meshery...")
+
+	// Get viper instance used for context
+	mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
+	if err != nil {
+		return ErrProcessingMctlConfig(err)
+	}
+	// get the platform, channel and the version of the current context
+	// if a temp context is set using the -c flag, use it as the current context
+	if tempContext != "" {
+		err = mctlCfg.SetCurrentContext(tempContext)
+		if err != nil {
+			return ErrSettingTemporaryContext(err)
+		}
+	}
+
+	currCtx, err := mctlCfg.GetCurrentContext()
+	if err != nil {
+		return ErrRetrievingCurrentContext(err)
+	}
+
+	currPlatform := currCtx.GetPlatform()
+
+	running, err := utils.IsMesheryRunning(currPlatform)
+	if err != nil {
+		return err
+	}
+	if !running { // Meshery is not running
+		if err := start(); err != nil {
+			return ErrRestartMeshery(err)
+		}
+	} else {
 		if err := stop(); err != nil {
-			return errors.Wrap(err, utils.SystemError("Failed to restart Meshery"))
+			return ErrRestartMeshery(err)
 		}
 
 		if err := start(); err != nil {
-			return errors.Wrap(err, utils.SystemError("Failed to restart Meshery"))
+			return ErrRestartMeshery(err)
 		}
-		return nil
-	},
+	}
+	return nil
+}
+
+func init() {
+	restartCmd.Flags().BoolVarP(&skipUpdateFlag, "skip-update", "", false, "(optional) skip checking for new Meshery's container images.")
 }
