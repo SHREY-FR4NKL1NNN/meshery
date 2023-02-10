@@ -28,7 +28,6 @@ import (
 var (
 	availableSubcommands []*cobra.Command
 	outputFormatFlag     string
-	tokenPath            string
 	// setting up for error formatting
 	cmdUsed string
 )
@@ -40,7 +39,7 @@ var PerfCmd = &cobra.Command{
 	Long:  `Performance Management & Benchmarking`,
 	Example: `
 // Run performance test
-mesheryctl perf apply --profile test --name "a quick stress test" --url http://192.168.1.15/productpage --qps 300 --concurrent-requests 2 --duration 30s
+mesheryctl perf apply test-3 --name "a quick stress test" --url http://192.168.1.15/productpage --qps 300 --concurrent-requests 2 --duration 30s
 	
 // List performance profiles
 mesheryctl perf profile sam-test
@@ -52,7 +51,6 @@ mesheryctl perf result sam-test
 mesheryctl perf result -o json
 mesheryctl perf result -o yaml
 	`,
-	Args: cobra.MinimumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		//Check prerequisite
 		hcOptions := &system.HealthCheckOptions{
@@ -67,15 +65,18 @@ mesheryctl perf result -o yaml
 		return hc.RunPreflightHealthChecks()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
 		if ok := utils.IsValidSubcommand(availableSubcommands, args[0]); !ok {
-			return errors.New(utils.SystemError(fmt.Sprintf("invalid command: \"%s\"", args[0])))
+			return errors.New(utils.PerfError(fmt.Sprintf("'%s' is a invalid command.  Use 'mesheryctl perf --help' to display usage guide.'\n", args[0])))
 		}
 		return nil
 	},
 }
 
 func init() {
-	PerfCmd.PersistentFlags().StringVarP(&tokenPath, "token", "t", "", "(required) Path to meshery auth config")
+	PerfCmd.PersistentFlags().StringVarP(&utils.TokenFlag, "token", "t", "", "(required) Path to meshery auth config")
 	PerfCmd.PersistentFlags().StringVarP(&outputFormatFlag, "output-format", "o", "", "(optional) format to display in [json|yaml]")
 	PerfCmd.PersistentFlags().BoolVarP(&utils.SilentFlag, "yes", "y", false, "(optional) assume yes for user interactive prompts.")
 

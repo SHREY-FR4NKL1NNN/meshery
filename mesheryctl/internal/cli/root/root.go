@@ -47,13 +47,24 @@ var RootCmd = &cobra.Command{
 	Use:   "mesheryctl",
 	Short: "Meshery Command Line tool",
 	Long:  `Meshery is the service mesh management plane, providing lifecycle, performance, and configuration management of service meshes and their workloads.`,
-	Args:  cobra.MinimumNArgs(1),
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		log.Println("Args passed in", args)
+	Example: `
+// Base command
+mesheryctl
+
+// Display help about command/subcommand
+mesheryctl --help
+mesheryctl system start --help
+
+// For viewing verbose output
+mesheryctl -v [or] --verbose
+	`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
+
 		if ok := utils.IsValidSubcommand(availableSubcommands, args[0]); !ok {
-			return errors.New(utils.RootError(fmt.Sprintf("invalid command: \"%s\"", args[0])))
+			return errors.New(utils.RootError(fmt.Sprintf("'%s' is an invalid command. Use 'mesheryctl --help' to display usage guide.\n", args[0])))
 		}
 
 		return nil
@@ -62,10 +73,13 @@ var RootCmd = &cobra.Command{
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
-func Execute() {
+func Execute() error {
 	//log formatter for improved UX
 	utils.SetupLogrusFormatter()
-	_ = RootCmd.Execute()
+	// Removing printing command usage on error
+	RootCmd.SilenceUsage = true
+	err := RootCmd.Execute()
+	return err
 }
 
 func init() {
@@ -74,8 +88,9 @@ func init() {
 		log.Fatal(err)
 	}
 
-	cobra.OnInitialize(initConfig)
 	cobra.OnInitialize(setVerbose)
+	cobra.OnInitialize(setupLogger)
+	cobra.OnInitialize(initConfig)
 
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", utils.DefaultConfigPath, "path to config file")
 
@@ -86,6 +101,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 
 	availableSubcommands = []*cobra.Command{
+		completionCmd,
 		versionCmd,
 		system.SystemCmd,
 		pattern.PatternCmd,
@@ -96,6 +112,10 @@ func init() {
 	}
 
 	RootCmd.AddCommand(availableSubcommands...)
+}
+
+func TreePath() *cobra.Command {
+	return RootCmd
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -116,57 +136,41 @@ func initConfig() {
 		if os.IsNotExist(err) {
 			log.Printf("Missing Meshery config file.")
 		}
+
+		// Create a default meshconfig in each of the above two scenarios.
 		if os.IsNotExist(err) || (!os.IsNotExist(err) && stat.Size() == 0) {
-			// Check if Meshery config file needs to be created or not
-			// If silent flag is provided, create by default
-			// ortherwise ask for confirmation from user
-			userResponse := false
-			if utils.SilentFlag {
-				userResponse = true
-			} else {
-				userResponse = utils.AskForConfirmation("Create default config now")
-			}
 			// Check for Meshery existence and permission of application folder
-			if userResponse {
-				if _, err := os.Stat(utils.MesheryFolder); err != nil {
-					if os.IsNotExist(err) {
-						err = os.MkdirAll(utils.MesheryFolder, 0775)
-						if err != nil {
-							log.Fatal(err)
-						}
+			if _, err := os.Stat(utils.MesheryFolder); err != nil {
+				if os.IsNotExist(err) {
+					err = os.MkdirAll(utils.MesheryFolder, 0775)
+					if err != nil {
+						log.Fatal(err)
 					}
 				}
-
-				// Create config file if not present in meshery folder
-				err = utils.CreateConfigFile()
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				// Add Token to context file
-				err = config.AddTokenToConfig(utils.TemplateToken, utils.DefaultConfigPath)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				// Add Context to context file
-				err = config.AddContextToConfig("local", utils.TemplateContext, utils.DefaultConfigPath, true)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				log.Println(
-					fmt.Sprintf("Default config file created at %s",
-						utils.DefaultConfigPath,
-					))
-			} else {
-				// User choose not to have a config file created. User must provide location to config file or create one.
-				log.Printf("Provide config file location using `--config <config-file>` or" +
-					" run `mesheryctl system context create <name>` to " +
-					"generate a config file.")
-
-				os.Exit(1)
 			}
+
+			// Create config file if not present in meshery folder
+			err = utils.CreateConfigFile()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Add Token to context file
+			err = config.AddTokenToConfig(utils.TemplateToken, utils.DefaultConfigPath)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Add Context to context file
+			err = config.AddContextToConfig("local", utils.TemplateContext, utils.DefaultConfigPath, true, false)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			log.Println(
+				fmt.Sprintf("Default config file created at %s",
+					utils.DefaultConfigPath,
+				))
 		}
 		viper.SetConfigFile(utils.DefaultConfigPath)
 	}
@@ -186,4 +190,8 @@ func setVerbose() {
 	if verbose {
 		log.SetLevel(log.DebugLevel)
 	}
+}
+
+func setupLogger() {
+	utils.SetupMeshkitLogger(verbose, nil)
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -18,11 +17,37 @@ var deleteCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete filter file",
 	Long:  `delete filter file will trigger deletion of the filter file`,
-	Args:  cobra.MinimumNArgs(0),
+	Example: `
+// Delete the specified WASM filter file using name or ID
+mesheryctl exp filter delete [filter-name | ID]
+
+// Delete using the file name
+mesheryctl exp filter delete test-wasm
+	`,
+	Args: cobra.MinimumNArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
+		client := &http.Client{}
 		if err != nil {
 			return errors.Wrap(err, "error processing config")
+		}
+		filter := ""
+		isID := false
+		if len(args) > 0 {
+			filter, isID, err = utils.Valid(args[0], "filter")
+			if err != nil {
+				return err
+			}
+		}
+
+		// Delete the filter using the id
+		if isID {
+			err := utils.DeleteConfiguration(filter, "filter")
+			if err != nil {
+				return errors.Wrap(err, utils.FilterError(fmt.Sprintf("failed to delete filter %s", args[0])))
+			}
+			utils.Log.Info("Filter ", args[0], " deleted successfully")
+			return nil
 		}
 
 		// Read file
@@ -31,13 +56,7 @@ var deleteCmd = &cobra.Command{
 			return errors.New(utils.SystemError(fmt.Sprintf("failed to read file %s", file)))
 		}
 
-		client := &http.Client{}
-		req, err := http.NewRequest("DELETE", mctlCfg.GetBaseMesheryURL()+"/api/filter/deploy", fileReader)
-		if err != nil {
-			return err
-		}
-
-		err = utils.AddAuthDetails(req, tokenPath)
+		req, err := utils.NewRequest("DELETE", mctlCfg.GetBaseMesheryURL()+"/api/filter/deploy", fileReader)
 		if err != nil {
 			return err
 		}
@@ -47,13 +66,17 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
+		if res.StatusCode != 200 {
+			return ErrInvalidAPICall(res.StatusCode)
+		}
+
 		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
-			return err
+			return errors.New("Error processing response body. " + err.Error())
 		}
 
-		log.Infof(string(body))
+		utils.Log.Info(string(body))
 
 		return nil
 	},

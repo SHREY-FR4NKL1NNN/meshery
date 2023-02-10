@@ -10,7 +10,7 @@ export const fetchAvailableAdapters = () => {
     dataFetch(
       "/api/system/adapters",
 
-      { credentials : "same-origin",
+      {
         method : "GET",
         credentials : "include", },
 
@@ -38,7 +38,7 @@ export const pingAdapterWithNotification = (updateProgress, enqueueSnackbar, act
   const successCb = (result) => {
     updateProgress({ showProgress : false });
     if (typeof result !== "undefined") {
-      enqueueSnackbar("Adapter successfully pinged!", { variant : "success",
+      enqueueSnackbar("Adapter pinged!", { variant : "success",
         autoHideDuration : 2000,
         action });
     }
@@ -59,7 +59,7 @@ export const pingAdapter = (adapterLoc, successCb, errorCb) => {
 
   dataFetch(
       `/api/system/adapters?adapter=${encodeURIComponent(adapterLoc)}`,
-      { credentials : "same-origin",
+      {
         credentials : "include", },
       successCb,
       errorCb
@@ -71,7 +71,7 @@ export const configureAdapterWithNotification = (enqueueSnackbar, updateProgress
   const successCb = (result) => {
     updateProgress({ showProgress : false });
     if (typeof result !== "undefined") {
-      enqueueSnackbar("Adapter was successfully configured!", {
+      enqueueSnackbar("Adapter was configured!", {
         variant : "success",
         "data-cy" : "adapterSuccessSnackbar",
         autoHideDuration : 2000,
@@ -102,7 +102,7 @@ export const configureAdapter = (successCb, errorCb, adapterLocation) => {
   return dataFetch(
     "/api/system/adapter/manage",
     {
-      credentials : "same-origin",
+
       method : "POST",
       credentials : "include",
       headers : { "Content-Type" : "application/x-www-form-urlencoded;charset=UTF-8", },
@@ -119,7 +119,6 @@ export const handleDeleteAdapter =  (successCb, errorCb) => (adapterLoc) => {
   return  dataFetch(
       `/api/system/adapter/manage?adapter=${encodeURIComponent(adapterLoc)}`,
       {
-        credentials : "same-origin",
         method : "DELETE",
         credentials : "include",
       },

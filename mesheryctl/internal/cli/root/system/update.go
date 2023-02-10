@@ -15,6 +15,8 @@
 package system
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
@@ -32,7 +34,17 @@ var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Pull new Meshery images/manifest files.",
 	Long:  `Pull new Meshery container images and manifests from artifact repository.`,
-	Args:  cobra.NoArgs,
+	Example: `
+// Pull new Meshery images from Docker Hub. This does not update mesheryctl. This command may be executed while Meshery is running.
+mesheryctl system update
+
+// Pull the latest manifest files alone
+mesheryctl system update --skip-reset
+
+! Refer below image link for usage
+* Usage of mesheryctl system update
+# ![update-usage](/assets/img/mesheryctl/update.png)
+	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		//Check prerequisite
 		hcOptions := &HealthCheckOptions{
@@ -47,6 +59,9 @@ var updateCmd = &cobra.Command{
 		return hc.RunPreflightHealthChecks()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 0 {
+			return errors.New(utils.SystemLifeCycleError(fmt.Sprintf("this command takes no arguments. See '%s --help' for more information.\n", cmd.CommandPath()), "update"))
+		}
 		// Get viper instance used for context
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
@@ -89,20 +104,13 @@ var updateCmd = &cobra.Command{
 
 		switch currCtx.GetPlatform() {
 		case "docker":
-			if !utils.SkipResetFlag {
-				err := resetMesheryConfig()
-
-				if err != nil {
-					return err
-				}
-			}
-
+			log.Info("Updating Meshery containers")
 			err = utils.UpdateMesheryContainers()
 			if err != nil {
 				return errors.Wrap(err, utils.SystemError("failed to update Meshery containers"))
 			}
 
-			err = config.SetContext(viper.GetViper(), currCtx, mctlCfg.GetCurrentContextName())
+			err = config.UpdateContextInConfig(viper.GetViper(), currCtx, mctlCfg.GetCurrentContextName())
 
 			if err != nil {
 				return err
@@ -114,22 +122,12 @@ var updateCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			mesheryImageVersion := currCtx.GetVersion()
 			// If the user skips reset, then just restart the pods else fetch updated manifest files and apply them
 			if !utils.SkipResetFlag {
-				// get value overrides to install the helm chart
-				overrideValues := utils.SetOverrideValues(currCtx, "latest")
 
 				// Apply the latest helm chart along with the default image tag specified in the charts "stable-latest"
-				if err = kubeClient.ApplyHelmChart(meshkitkube.ApplyHelmChartConfig{
-					Namespace:       utils.MesheryNamespace,
-					CreateNamespace: true,
-					ChartLocation: meshkitkube.HelmChartLocation{
-						Repository: utils.HelmChartURL,
-						Chart:      utils.HelmChartName,
-					},
-					Action:         meshkitkube.UPGRADE,
-					OverrideValues: overrideValues,
-				}); err != nil {
+				if err = applyHelmCharts(kubeClient, currCtx, mesheryImageVersion, false, meshkitkube.UPGRADE); err != nil {
 					return errors.Wrap(err, "cannot update Meshery")
 				}
 			}
@@ -150,7 +148,7 @@ var updateCmd = &cobra.Command{
 				return ErrHealthCheckFailed(err)
 			}
 
-			running, err := utils.IsMesheryRunning(currCtx.GetPlatform())
+			running, err := utils.AreMesheryComponentsRunning(currCtx.GetPlatform())
 			if err != nil {
 				return err
 			}
@@ -162,7 +160,7 @@ var updateCmd = &cobra.Command{
 			}
 
 			currCtx.SetVersion("latest")
-			err = config.SetContext(viper.GetViper(), currCtx, mctlCfg.GetCurrentContextName())
+			err = config.UpdateContextInConfig(viper.GetViper(), currCtx, mctlCfg.GetCurrentContextName())
 			if err != nil {
 				return err
 			}

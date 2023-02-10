@@ -1,16 +1,15 @@
 import dataFetch from "../../../lib/data-fetch";
-
+import { updateProgress } from "../../../lib/store";
 
 /**
   * Pings kuberenetes server endpoint
   * @param  {(res) => void} successHandler
   * @param  {(err) => void} errorHandler
 */
-export const pingKubernetes = (successHandler,errorHandler) => {
+export const pingKubernetes = (successHandler,errorHandler, context) => {
   dataFetch(
-    "/api/system/kubernetes/ping",
-    { credentials : "same-origin",
-      credentials : "include", },
+    "/api/system/kubernetes/ping?context=" + context,
+    { credentials : "include" },
     successHandler,
     errorHandler
   );
@@ -38,12 +37,13 @@ export const isKubernetesConnected = (isClusterConfigured,kubernetesPingStatus) 
 }
 
 
-export const deleteKubernetesConfig = (successCb,errorCb) =>
+export const deleteKubernetesConfig = (successCb,errorCb, id) =>
   dataFetch(
-    "/api/system/kubernetes",
-    { credentials : "same-origin",
+    "/api/system/kubernetes/contexts/" + id,
+    {
       method : "DELETE",
       credentials : "include", },
+    updateProgress({ showProgress : false }),
     successCb,
     errorCb
   )
@@ -67,7 +67,6 @@ export const fetchContexts = (updateProgress, k8sfile) => {
     dataFetch(
       "/api/system/kubernetes/contexts",
       {
-        credentials : "same-origin",
         method : "POST",
         credentials : "include",
         body : formData,
@@ -106,7 +105,6 @@ export const submitConfig = (enqueueSnackbar, updateProgress, updateK8SConfig, a
   dataFetch(
     "/api/system/kubernetes",
     {
-      credentials : "same-origin",
       method : "POST",
       credentials : "include",
       body : formData,
@@ -114,7 +112,7 @@ export const submitConfig = (enqueueSnackbar, updateProgress, updateK8SConfig, a
     (result) => {
       updateProgress({ showProgress : false });
       if (typeof result !== "undefined") {
-        enqueueSnackbar("Kubernetes config was successfully validated!", { variant : "success",
+        enqueueSnackbar("Kubernetes config was validated!", { variant : "success",
           autoHideDuration : 2000,
           action });
         updateK8SConfig({ k8sConfig : {

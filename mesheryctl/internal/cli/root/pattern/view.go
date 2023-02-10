@@ -2,15 +2,14 @@ package pattern
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 
 	"github.com/ghodss/yaml"
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -21,10 +20,18 @@ var (
 )
 
 var viewCmd = &cobra.Command{
-	Use:   "view <pattern name>",
+	Use:   "view pattern name",
 	Short: "Display pattern(s)",
 	Long:  `Displays the contents of a specific pattern based on name or id`,
 	Args:  cobra.MaximumNArgs(1),
+	Example: `
+// view a pattern
+mesheryctl pattern view [pattern-name | ID]
+
+! Refer below image link for usage
+* Usage of mesheryctl pattern view
+# ![pattern-view-usage](/assets/img/mesheryctl/patternView.png)
+	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
@@ -37,9 +44,7 @@ var viewCmd = &cobra.Command{
 			if viewAllFlag {
 				return errors.New("-a cannot be used when [pattern-name|pattern-id] is specified")
 			}
-			pattern = args[0]
-			// check if the pattern argument is a valid uuid v4 string
-			isID, err = regexp.MatchString("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$", pattern)
+			pattern, isID, err = utils.Valid(args[0], "pattern")
 			if err != nil {
 				return err
 			}
@@ -49,7 +54,7 @@ var viewCmd = &cobra.Command{
 			if viewAllFlag {
 				url += "/api/pattern?page_size=10000"
 			} else {
-				return errors.New("[pattern-name|pattern-id] not specified, use -a to view all patterns")
+				return errors.New("Pattern name or ID is not specified. Use `-a` to view all patterns")
 			}
 		} else if isID {
 			// if pattern is a valid uuid, then directly fetch the pattern
@@ -60,12 +65,7 @@ var viewCmd = &cobra.Command{
 		}
 
 		client := &http.Client{}
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return err
-		}
-
-		err = utils.AddAuthDetails(req, tokenPath)
+		req, err := utils.NewRequest("GET", url, nil)
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ var viewCmd = &cobra.Command{
 
 		var dat map[string]interface{}
 		if err = json.Unmarshal(body, &dat); err != nil {
-			return errors.Wrap(err, "failed to unmarshal response body")
+			return errors.Wrap(err, "couldn't process JSON response from Meshery Server")
 		}
 
 		if isID {
@@ -103,7 +103,7 @@ var viewCmd = &cobra.Command{
 			// use the first match from the result when searching by pattern name
 			arr := dat["patterns"].([]interface{})
 			if len(arr) == 0 {
-				log.Infof("pattern with name: %s not found", pattern)
+				utils.Log.Info(fmt.Sprintf("pattern with name: %s not found. Enter a valid pattern name or ID", pattern))
 				return nil
 			}
 			if body, err = json.MarshalIndent(arr[0], "", "  "); err != nil {
@@ -118,7 +118,7 @@ var viewCmd = &cobra.Command{
 		} else if outFormatFlag != "json" {
 			return errors.New("output-format choice invalid, use [json|yaml]")
 		}
-		log.Info(string(body))
+		utils.Log.Info(string(body))
 		return nil
 	},
 }

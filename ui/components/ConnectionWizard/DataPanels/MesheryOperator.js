@@ -25,14 +25,8 @@ const chipStyles = (theme) => ({ chipIcon : { width : theme.spacing(2.5) },
   chip : { marginRight : theme.spacing(1),
     marginBottom : theme.spacing(1), }, })
 
-
-
-
-
-
-
-
-
+// Connection Wizard
+// TODO: bind to contextID prop, leaving due to no use in current UI
 const MesheryOperatorDataPanel = ({
   operatorInformation, updateProgress, enqueueSnackbar, closeSnackbar
 }) => {
@@ -41,11 +35,11 @@ const MesheryOperatorDataPanel = ({
 
     const successCb = (res) => {
       if (res?.operator?.status == "ENABLED") {
-        enqueueSnackbar('Operator was successfully pinged!', { variant : 'success',
+        enqueueSnackbar('Operator was pinged!', { variant : 'success',
           autoHideDuration : 2000,
           action : closeButtonForSnackbarAction(closeSnackbar) })
       } else {
-        enqueueSnackbar('Operator was not successfully pinged!', { variant : 'failure',
+        enqueueSnackbar('Operator was not pinged!', { variant : 'failure',
           autoHideDuration : 2000,
           action : closeButtonForSnackbarAction(closeSnackbar) })
       }

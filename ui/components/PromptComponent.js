@@ -9,14 +9,15 @@ import {
   DialogContent,
   DialogTitle
 } from "@material-ui/core";
+import classNames from 'classnames';
 
-const styles = () => ({
+const styles = (theme) => ({
   title : {
     textAlign : 'center',
     minWidth : 400,
     padding : '10px',
     color : '#fff',
-    backgroundColor : '#607d8b'
+    backgroundColor : '#396679'
   },
   subtitle : {
     minWidth : 400,
@@ -26,20 +27,35 @@ const styles = () => ({
   },
   actions : {
     display : 'flex',
-    justifyContent : 'center',
+    justifyContent : 'space-evenly',
   },
   button0 : {
-    margin : '8px 0px',
-    width : '100%',
+    margin : theme.spacing(0.5),
+    padding : theme.spacing(1),
+    borderRadius : 5,
+    backgroundColor : "#607d8b",
+    "&:hover" : {
+      backgroundColor : "#607d8b",
+      boxShadow : "0px 2px 4px -1px rgb(0 0 0 / 20%), 0px 4px 5px 0px rgb(0 0 0 / 14%), 0px 1px 10px 0px rgb(0 0 0 / 12%)"
+    },
+    minWidth : 100,
   },
   button1 : {
-    margin : '8px 0px',
-    width : '100%',
+    margin : theme.spacing(0.5),
+    padding : theme.spacing(1),
+    borderRadius : 5,
     backgroundColor : "#e0e0e0",
     color : "rgba(0, 0, 0, 0.87)",
     "&:hover" : {
       backgroundColor : "#d5d5d5",
       boxShadow : "0px 2px 4px -1px rgb(0 0 0 / 20%), 0px 4px 5px 0px rgb(0 0 0 / 14%), 0px 1px 10px 0px rgb(0 0 0 / 12%)"
+    },
+    minWidth : 100,
+  },
+  resetButton : {
+    backgroundColor : "#8F1F00",
+    "&:hover" : {
+      backgroundColor : "#B32700",
     }
   }
 });
@@ -108,16 +124,17 @@ class PromptComponent extends React.Component {
               resolve(options[1]);
             }} key={options[1]} className={classes.button1}
             >
-              {options[1]}
+              <Typography variant body2> {options[1]} </Typography>
             </Button>
             <Button onClick={() => {
               this.hide();
               resolve(options[0]);
-            }} key={options[0]}  className={classes.button0}
+            }} key={options[0]}
+            className={options[0]?.toLowerCase() === "reset" ? classNames(classes.button0,classes.resetButton) : classes.button0}
             type="submit"
             variant="contained"
             color="primary">
-              {options[0]}
+              <Typography variant body2 > {options[0]} </Typography>
             </Button>
           </DialogActions>
         </Dialog>

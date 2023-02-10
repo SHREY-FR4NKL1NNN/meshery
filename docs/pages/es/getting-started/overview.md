@@ -5,7 +5,7 @@ permalink: es/overview
 language: es
 ---
 
-As the service mesh management plane, Meshery enables the adoption, operation, and management of any service mesh and their workloads. Meshery's powerful performance management functionality is accomplished through implementation of [Service Mesh Performance](https://smp-spec.io) (SMP). Meshery's multi-mesh management functionality leverages [Service Mesh Interface](https://smi-spec.io) (SMI). Meshery enables operators to deploy WebAssembly filters to Envoy-based data planes. Meshery facilitates learning about functionality and performance of service meshes and incorporates the collection and display of metrics from applications running on or across service meshes.
+As the cloud native management plane, Meshery enables the adoption, operation, and management of any service mesh and their workloads. Meshery's powerful performance management functionality is accomplished through implementation of [Service Mesh Performance](https://smp-spec.io) (SMP). Meshery's cloud native manager functionality leverages [Service Mesh Interface](https://smi-spec.io) (SMI). Meshery enables operators to deploy WebAssembly filters to Envoy-based data planes. Meshery facilitates learning about functionality and performance of service meshes and incorporates the collection and display of metrics from applications running on or across service meshes.
 
 ## Meshery's Functionality
 
@@ -29,7 +29,7 @@ Meshery features can be categorized by:
 
 Whether making a Day 0 adoption choice or maintaining a Day 2 deployment, Meshery has useful capabilities in either circumstance. Targeted audience for Meshery project would be any technology operators that leverage service mesh in their ecosystem; this includes developers, devops engineers, decision makers, architects, and organizations that rely on microservices platform.
 
-### Service mesh management - one or multiple service meshes.\*\*
+### Cloud Native Management - multi-cluster Kubernetes and service mesh management.\*\*
 
 ### Meshery is for performance management: testing and benchmarking
 
@@ -50,7 +50,7 @@ Meshery is intended to be a vendor and project-neutral utility for uniformly ben
 1. Understand behavioral differences between service meshes.
 1. Track your application performance from version to version.
 
-<a href="https://raw.githubusercontent.com/layer5io/meshery/master/assets/img/readme/meshery_lifecycle_management.png"><img alt="Layer5 Service Mesh Community" src="{{ site.baseurl }}{% link assets/img/readme/meshery_lifecycle_management.png %}"  width="100%" align="center"/></a>
+<a href="https://raw.githubusercontent.com/meshery/meshery/master/docs/assets/img/readme/meshery_lifecycle_management.png"><img alt="Layer5 Service Mesh Community" src="{{ site.baseurl }}{% link assets/img/readme/meshery_lifecycle_management.png %}"  width="100%" align="center"/></a>
 Establish a performance benchmark and track performance against this baseline as your environment changes over time.
 
 ## Meshery is for any service mesh

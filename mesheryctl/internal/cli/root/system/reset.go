@@ -19,6 +19,7 @@ import (
 
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
+	"github.com/pkg/errors"
 
 	log "github.com/sirupsen/logrus"
 
@@ -31,8 +32,18 @@ var resetCmd = &cobra.Command{
 	Use:   "reset",
 	Short: "Reset Meshery's configuration",
 	Long:  `Reset Meshery to it's default configuration.`,
-	Args:  cobra.NoArgs,
+	Example: `
+// Resets meshery.yaml file with a copy from Meshery repo
+mesheryctl system reset
+
+! Refer below image link for usage
+* Usage of mesheryctl system reset
+# ![reset-usage](/assets/img/mesheryctl/reset.png)
+	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 0 {
+			return errors.New(utils.SystemLifeCycleError(fmt.Sprintf("this command takes no arguments. See '%s --help' for more information.\n", cmd.CommandPath()), "reset"))
+		}
 		return resetMesheryConfig()
 	},
 }
@@ -76,6 +87,28 @@ func resetMesheryConfig() error {
 	log.Printf("Version: %s", currCtx.GetVersion())
 	log.Printf("Platform: %s\n", currCtx.GetPlatform())
 
+	// Reset the config file to the default context
+	defaultContext := utils.TemplateContext
+	defaultContext.Platform = currCtx.Platform
+	err = config.AddContextToConfig(mctlCfg.GetCurrentContextName(), defaultContext, utils.DefaultConfigPath, true, true)
+	if err != nil {
+		return ErrSettingDefaultContextToConfig(err)
+	}
+
+	if err = fetchManifests(mctlCfg); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Fetches manifests for meshery components based on the current context
+func fetchManifests(mctlCfg *config.MesheryCtlConfig) error {
+	currCtx, err := mctlCfg.GetCurrentContext()
+	if err != nil {
+		return ErrRetrievingCurrentContext(err)
+	}
+
 	switch currCtx.GetPlatform() {
 	case "docker":
 
@@ -115,5 +148,6 @@ func resetMesheryConfig() error {
 	default:
 		return fmt.Errorf("the platform %s is not supported currently. The supported platforms are:\ndocker\nkubernetes\nPlease check %s/config.yaml file", currCtx.Platform, utils.MesheryFolder)
 	}
+
 	return nil
 }

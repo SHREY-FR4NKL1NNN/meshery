@@ -1,32 +1,47 @@
 // @ts-check
 import {
-  Avatar, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, NoSsr,
-  TableCell, Tooltip, Typography
+  Avatar, Button, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, NoSsr, TableCell, Tooltip, Typography
 } from "@material-ui/core";
-import { createTheme, makeStyles, MuiThemeProvider, withStyles } from "@material-ui/core/styles";
+import { makeStyles, withStyles } from "@material-ui/core/styles";
 import TableSortLabel from "@material-ui/core/TableSortLabel";
 import CloseIcon from "@material-ui/icons/Close";
 import DeleteIcon from "@material-ui/icons/Delete";
 import FullscreenIcon from '@material-ui/icons/Fullscreen';
 import FullscreenExitIcon from '@material-ui/icons/FullscreenExit';
-import PlayArrowIcon from '@material-ui/icons/PlayArrow';
-import UploadIcon from "@material-ui/icons/Publish";
 import SaveIcon from '@material-ui/icons/Save';
 import MUIDataTable from "mui-datatables";
+import CustomToolbarSelect from "./MesheryPatterns/CustomToolbarSelect";
 import { withSnackbar } from "notistack";
-import AddIcon from "@material-ui/icons/Add";
-import React, { useEffect, useRef, useState } from "react";
+import AddIcon from "@material-ui/icons/AddCircleOutline";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { UnControlled as CodeMirror } from "react-codemirror2";
 import Moment from "react-moment";
 import { connect } from "react-redux";
 import { bindActionCreators } from "redux";
 import dataFetch from "../lib/data-fetch";
-import FILE_OPS from "../utils/configurationFileHandlersEnum"
-import { updateProgress } from "../lib/store";
-import { trueRandom } from "../lib/trueRandom";
-import PatternForm from "./configuratorComponents/patternConfigurator";
+import { toggleCatalogContent, updateProgress } from "../lib/store";
+import DesignConfigurator from "../components/configuratorComponents/patternConfigurator";
+import UploadImport from "./UploadImport";
+import { ctxUrl } from "../utils/multi-ctx";
+import { generateValidatePayload, getComponentsinFile, randomPatternNameGenerator as getRandomName } from "../utils/utils";
+import ViewSwitch from "./ViewSwitch";
+import CatalogFilter from "./CatalogFilter";
+import MesheryPatternGrid from "./MesheryPatterns/MesheryPatternGridView";
+import UndeployIcon from "../public/static/img/UndeployIcon";
+import DoneAllIcon from '@material-ui/icons/DoneAll';
+import DoneIcon from '@material-ui/icons/Done';
+import PublicIcon from '@material-ui/icons/Public';
+import ConfirmationModal from "./ConfirmationModal";
+import PublishIcon from "@material-ui/icons/Publish";
 import PromptComponent from "./PromptComponent";
-import URLUploader from "./URLUploader";
+import ConfigurationSubscription from "./graphql/subscriptions/ConfigurationSubscription";
+import fetchCatalogPattern from "./graphql/queries/CatalogPatternQuery";
+import LoadingScreen from "./LoadingComponents/LoadingComponent";
+import { SchemaContext } from "../utils/context/schemaSet";
+import Validation from "./Validation";
+import { ACTIONS, FILE_OPS, VISIBILITY } from "../utils/Enum";
+import PublishModal from "./PublishModal";
+import CloneIcon from "../public/static/img/CloneIcon";
 
 const styles = (theme) => ({
   grid : {
@@ -44,13 +59,60 @@ const styles = (theme) => ({
   iconPatt : {
     width : "24px",
     height : "24px",
+    filter : theme.palette.secondary.brightness
+  },
+  topToolbar : {
+    margin : "2rem auto",
+    display : "flex",
+    justifyContent : "space-between",
+    paddingLeft : "1rem"
+  },
+  viewSwitchButton : {
+    justifySelf : "flex-end",
+    paddingLeft : "1rem"
   },
   createButton : {
     display : "flex",
+    justifyContent : "flex-start",
+    alignItems : "center",
+    whiteSpace : "nowrap",
+  },
+  UploadImport : {
+    marginLeft : "1.5rem",
+  },
+  noDesignAddButton : {
+    marginTop : "0.5rem"
+  },
+  noDesignContainer : {
+    padding : "2rem",
+    display : "flex",
     justifyContent : "center",
     alignItems : "center",
-    margin : "1rem"
+    flexDirection : "column",
+  },
+  noDesignButtons : {
+    display : "flex",
+    justifyContent : "center",
+    alignItems : "center",
+    flexDirection : "row",
+  },
+  noDesignPaper : {
+    padding : "0.5rem",
+    fontSize : "3rem"
+  },
+  noDesignText : {
+    fontSize : "2rem",
+    marginBottom : "2rem",
+  },
+  addIcon : {
+    paddingRight : ".35rem",
+  },
+  visibilityImg : {
+    filter : theme.palette.secondary.img,
   }
+  // text : {
+  //   padding : "5px"
+  // }
 });
 
 const useStyles = makeStyles((theme) => ({
@@ -86,26 +148,6 @@ const useStyles = makeStyles((theme) => ({
     }
   }
 }));
-
-function CustomToolbar(onClick, urlOnClick) {
-  return function Toolbar() {
-    return (
-      <>
-        <label htmlFor="upload-button">
-          <input type="file" accept=".yaml, .yml" hidden onChange={onClick} id="upload-button" name="upload-button" />
-          <Tooltip title="Upload Pattern">
-            <IconButton aria-label="Upload" component="span">
-              <UploadIcon />
-            </IconButton>
-          </Tooltip>
-        </label>
-        <label htmlFor="url-upload-button">
-          <URLUploader onSubmit={urlOnClick} />
-        </label>
-      </>
-    );
-  };
-}
 
 function TooltipIcon({ children, onClick, title }) {
   return (
@@ -151,6 +193,7 @@ function YAMLEditor({ pattern, onClose, onSubmit }) {
             lineNumbers : true,
             lineWrapping : true,
             gutters : ["CodeMirror-lint-markers"],
+            // @ts-ignore
             lint : true,
             mode : "text/x-yaml",
           }}
@@ -163,7 +206,9 @@ function YAMLEditor({ pattern, onClose, onSubmit }) {
           <IconButton
             aria-label="Update"
             color="primary"
-            onClick={() => onSubmit(yaml, pattern.id, pattern.name, FILE_OPS.UPDATE)}
+            onClick={() => onSubmit({
+              data : yaml, id : pattern.id, name : pattern.name, type : FILE_OPS.UPDATE
+            })}
           >
             <SaveIcon />
           </IconButton>
@@ -172,7 +217,12 @@ function YAMLEditor({ pattern, onClose, onSubmit }) {
           <IconButton
             aria-label="Delete"
             color="primary"
-            onClick={() => onSubmit(yaml, pattern.id, pattern.name,)}
+            onClick={() => onSubmit({
+              data : yaml,
+              id : pattern.id,
+              name : pattern.name,
+              type : FILE_OPS.DELETE
+            })}
           >
             <DeleteIcon />
           </IconButton>
@@ -187,110 +237,301 @@ function resetSelectedPattern() {
 }
 
 function MesheryPatterns({
-  updateProgress, enqueueSnackbar, closeSnackbar, user, classes
+  updateProgress, enqueueSnackbar, closeSnackbar, user, classes, selectedK8sContexts, catalogVisibility, toggleCatalogContent
 }) {
   const [page, setPage] = useState(0);
   const [search] = useState("");
   const [sortOrder] = useState("");
   const [count, setCount] = useState(0);
   const [pageSize, setPageSize] = useState(10);
-  const modalRef = useRef(null);
+  const modalRef = useRef();
   const [patterns, setPatterns] = useState([]);
   const [selectedRowData, setSelectedRowData] = useState(null);
   const [selectedPattern, setSelectedPattern] = useState(resetSelectedPattern());
+  const [extensionPreferences, setExtensionPreferences] = useState({});
 
-  const DEPLOY_URL = '/api/pattern/deploy';
+  const [patternErrors, setPatternErrors] = useState(new Map());
 
-  const getMuiTheme = () => createTheme({
-    overrides : {
-      MuiInput : {
-        underline : {
-          "&:hover:not(.Mui-disabled):before" : {
-            borderBottom : "2px solid #222"
-          },
-          "&:after" : {
-            borderBottom : "2px solid #222"
-          }
-        }
-      },
-      MUIDataTableSearch : {
-        searchIcon : {
-          color : "#607d8b",
-          marginTop : "7px",
-          marginRight : "8px",
-        },
-        clearIcon : {
-          "&:hover" : {
-            color : "#607d8b"
-          }
-        },
-      },
-      MUIDataTableSelectCell : {
-        checkboxRoot : {
-          '&$checked' : {
-            color : '#607d8b',
-          },
-        },
-      },
-      MUIDataTableToolbar : {
-        iconActive : {
-          color : "#222"
-        },
-        icon : {
-          "&:hover" : {
-            color : "#607d8b"
-          }
-        },
-      }
+  const [viewType, setViewType] = useState(
+    /**  @type {TypeView} */
+    ("grid")
+  );
+
+  const PATTERN_URL = '/api/pattern'
+  const DEPLOY_URL = `${PATTERN_URL}/deploy`;
+  const CLONE_URL = '/clone';
+  const [modalOpen, setModalOpen] = useState({
+    open : false,
+    action : 0,
+    pattern_file : null,
+    name : "",
+    count : 0,
+    validationBody : null,
+    errors : {
+      validationErrors : 0
     }
   });
+
+  const [importModal, setImportModal] = useState({
+    open : false
+  })
+  const [publishModal, setPublishModal] = useState({
+    open : false,
+    pattern : {}
+  });
+  const [loading, stillLoading] = useState(true);
+
+  const catalogContentRef = useRef();
+  const catalogVisibilityRef = useRef(false);
+  const disposeConfSubscriptionRef = useRef(null);
+
+  const { workloadTraitSet } = useContext(SchemaContext);
+
 
   const ACTION_TYPES = {
     FETCH_PATTERNS : {
       name : "FETCH_PATTERNS",
-      error_msg : "Failed to fetch patterns"
+      error_msg : "Failed to fetch designs"
     },
     UPDATE_PATTERN : {
       name : "UPDATE_PATTERN",
-      error_msg : "Failed to update pattern file"
+      error_msg : "Failed to update design file"
     },
     DELETE_PATTERN : {
       name : "DELETE_PATTERN",
-      error_msg : "Failed to delete pattern file"
+      error_msg : "Failed to delete design file"
     },
     DEPLOY_PATTERN : {
       name : "DEPLOY_PATTERN",
-      error_msg : "Failed to deploy pattern file"
+      error_msg : "Failed to deploy design file"
+    },
+    UNDEPLOY_PATTERN : {
+      name : "UNDEPLOY_PATTERN",
+      error_msg : "Failed to undeploy design file"
     },
     UPLOAD_PATTERN : {
       name : "UPLOAD_PATTERN",
-      error_msg : "Failed to upload pattern file"
+      error_msg : "Failed to upload design file"
     },
+    CLONE_PATTERN : {
+      name : "CLONE_PATTERN",
+      error_msg : "Failed to clone design file"
+    },
+    PUBLISH_CATALOG : {
+      name : "PUBLISH_CATALOG",
+      error_msg : "Failed to publish catalog"
+    }
   };
 
   const searchTimeout = useRef(null);
   /**
    * fetch patterns when the page loads
    */
+  // @ts-ignore
   useEffect(() => {
-    fetchPatterns(page, pageSize, search, sortOrder);
     document.body.style.overflowX = "hidden"
 
     return (() => document.body.style.overflowX = "auto")
-  }, []);
+  }, [page, pageSize, search, sortOrder]);
 
-  const handleDeploy = (pattern_file) => {
+
+  const handleCatalogPreference = (catalogPref) => {
+    let body = Object.assign({}, extensionPreferences)
+    body["catalogContent"] = catalogPref
+
+    dataFetch(
+      "/api/user/prefs",
+      {
+        method : "POST",
+        credentials : "include",
+        body : JSON.stringify({ usersExtensionPreferences : body })
+      },
+      () => {
+        enqueueSnackbar(`Catalog Content was ${catalogPref ? "enab" : "disab"}led`,
+          {
+            variant : 'success',
+            autoHideDuration : 4000,
+            action : (key) => (
+              <IconButton
+                key="close"
+                aria-label="Close"
+                color="inherit"
+                onClick={() => closeSnackbar(key)}
+              >
+                <CloseIcon />
+              </IconButton>
+            ),
+          });
+      },
+      err => console.error(err),
+    )
+  }
+
+  const fetchUserPrefs = () => {
+    dataFetch(
+      "/api/user/prefs",
+      {
+        method : "GET",
+        credentials : "include",
+      },
+      (result) => {
+        if (result) {
+          setExtensionPreferences(result?.usersExtensionPreferences)
+        }
+      },
+      err => console.error(err)
+    )
+  }
+
+
+  const handleCatalogVisibility = () => {
+    handleCatalogPreference(!catalogVisibilityRef.current);
+    catalogVisibilityRef.current = !catalogVisibility
+    toggleCatalogContent({ catalogVisibility : !catalogVisibility });
+  }
+
+  useEffect(() => {
+    fetchUserPrefs();
+    catalogVisibilityRef.current = catalogVisibility
+    const fetchCatalogPatterns = fetchCatalogPattern({
+      selector : {
+        search : "",
+        order : ""
+      }
+    }).subscribe({
+      next : (result) => {
+        catalogContentRef.current = result?.catalogPatterns;
+        initPatternsSubscription();
+      },
+      error : (err) => console.log("There was an error fetching Catalog Pattern: ", err)
+    });
+    return () => {
+      if (disposeConfSubscriptionRef.current) {
+        disposeConfSubscriptionRef.current.dispose();
+      }
+      fetchCatalogPatterns.unsubscribe();
+    }
+  }, [])
+
+  useEffect(() => {
+    handleSetPatterns(patterns)
+  }, [catalogVisibility])
+
+  const handleSetPatterns = (patterns) => {
+    if (catalogVisibilityRef.current && catalogContentRef.current?.length > 0) {
+      setPatterns([...catalogContentRef.current, ...patterns.filter(content => content.visibility !== VISIBILITY.PUBLISHED)])
+      return
+    }
+    setPatterns(patterns.filter(content => content.visibility !== VISIBILITY.PUBLISHED))
+  }
+
+  const initPatternsSubscription = (pageNo = page.toString(), pagesize = pageSize.toString(), searchText = search, order = sortOrder) => {
+    if (disposeConfSubscriptionRef.current) {
+      disposeConfSubscriptionRef.current.dispose();
+    }
+    const configurationSubscription = ConfigurationSubscription((result) => {
+      setPage(result.configuration?.patterns?.page || 0);
+      setPageSize(result.configuration?.patterns?.page_size || 0);
+      setCount(result.configuration?.patterns?.total_count || 0);
+      handleSetPatterns(result.configuration?.patterns?.patterns ?? [] );
+      stillLoading(false);
+    },
+    {
+      applicationSelector : {
+        pageSize : pagesize,
+        page : pageNo,
+        search : searchText,
+        order : order
+      },
+      patternSelector : {
+        pageSize : pagesize,
+        page : pageNo,
+        search : searchText,
+        order : order
+      },
+      filterSelector : {
+        pageSize : pagesize,
+        page : pageNo,
+        search : searchText,
+        order : order
+      }
+    });
+    disposeConfSubscriptionRef.current = configurationSubscription
+  }
+
+  const handleModalClose = () => {
+    // @ts-ignore
+    setModalOpen({
+      open : false,
+      pattern_file : null,
+      name : "",
+      count : 0
+    });
+  }
+
+  const handleModalOpen = (e, pattern_file, name, errors, action) => {
+    console.log("errors...//./././././", errors)
+    e.stopPropagation();
+    const compCount = getComponentsinFile(pattern_file);
+    const validationBody = (
+      <Validation
+        errors={errors}
+        compCount={compCount}
+        handleClose={() => setModalOpen({ ...modalOpen, open : false })}
+      />
+    )
+    setModalOpen({
+      open : true,
+      action : action,
+      pattern_file : pattern_file,
+      name : name,
+      count : compCount,
+      validationBody : validationBody,
+      errors : {
+        validationError : errors?.reduce((count, ele) => {
+          return ele.errors.length + count
+        }, 0)
+      }
+    });
+  }
+
+  const handleUploadImport = () => {
+    setImportModal({
+      open : true
+    });
+  }
+
+  const handleUploadImportClose = () => {
+    setImportModal({
+      open : false
+    });
+  }
+
+  const handlePublishModal = (ev, pattern) => {
+    ev.stopPropagation();
+    setPublishModal({
+      open : true,
+      pattern : pattern
+    });
+  };
+  const handlePublishModalClose = () => {
+    setPublishModal({
+      open : false,
+      pattern : {}
+    });
+  };
+
+  const handleDeploy = (pattern_file, name) => {
     updateProgress({ showProgress : true });
     dataFetch(
-      DEPLOY_URL,
+      ctxUrl(DEPLOY_URL, selectedK8sContexts),
       {
         credentials : "include",
         method : "POST",
         body : pattern_file,
       }, () => {
-        console.log("PatternFile Deploy API", `/api/pattern/deploy`);
         updateProgress({ showProgress : false });
-        enqueueSnackbar("Pattern Successfully Deployed!", {
+        enqueueSnackbar(`"${name}" Design deployed`, {
           variant : "success",
           action : function Action(key) {
             return (
@@ -306,16 +547,113 @@ function MesheryPatterns({
     );
   };
 
+  const handleVerify = (e, pattern_file, pattern_id) => {
+    e.stopPropagation();
+    const validationPayloads = generateValidatePayload(pattern_file, workloadTraitSet);
+    if (validationPayloads.err) {
+      handleError(validationPayloads.err);
+    }
+    dataFetch("/api/meshmodel/validate", {
+      method : "POST",
+      credentials : "include",
+      body : JSON.stringify({ "validationItems" : validationPayloads })
+    }, (res) => {
+      let errors = [];
+      const keys = Object.keys(res.result);
+      keys.forEach((key) => {
+        const error = res.result[key];
+        if (!error.isValid) {
+          errors = errors.concat({ service : key, errors : error.errors })
+        }
+      })
+      setPatternErrors(prevErrors => new Map([...prevErrors, [pattern_id, errors]]));
+      handleModalOpen(e, pattern_file, patterns[0].name, errors, ACTIONS.VERIFY)
+    },
+    handleError("Error validating pattern"),
+    );
+  }
+
+  const handleUnDeploy = (pattern_file, name) => {
+    updateProgress({ showProgress : true });
+    dataFetch(
+      ctxUrl(DEPLOY_URL, selectedK8sContexts),
+      {
+        credentials : "include",
+        method : "DELETE",
+        body : pattern_file,
+      }, () => {
+        updateProgress({ showProgress : false });
+        enqueueSnackbar(`"${name}" Design undeployed`, {
+          variant : "success",
+          action : function Action(key) {
+            return (
+              <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                <CloseIcon />
+              </IconButton>
+            );
+          },
+          autoHideDuration : 2000,
+        });
+      },
+      handleError(ACTION_TYPES.UNDEPLOY_PATTERN),
+    );
+  };
+  const handlePublish = (catalog_data) => {
+    updateProgress({ showProgress : true });
+    dataFetch(
+      `/api/pattern/catalog/publish`,
+      { credentials : "include", method : "POST", body : JSON.stringify(catalog_data) },
+      () => {
+        updateProgress({ showProgress : false });
+        enqueueSnackbar("Design Published!", {
+          variant : "success",
+          action : function Action(key) {
+            return (
+              <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                <CloseIcon />
+              </IconButton>
+            );
+          },
+          autoHideDuration : 2000,
+        });
+      },
+      handleError(ACTION_TYPES.PUBLISH_CATALOG),
+    );
+
+  }
+  function handleClone(patternID, name) {
+    updateProgress({ showProgress : true });
+    dataFetch(PATTERN_URL.concat(CLONE_URL, "/", patternID),
+      {
+        credentials : "include",
+        method : "POST",
+      },
+      () => {
+        updateProgress({ showProgress : false });
+        enqueueSnackbar(`"${name}" Design cloned`, {
+          variant : "success",
+          action : function Action(key) {
+            return (
+              <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                <CloseIcon />
+              </IconButton>
+            );
+          },
+          autoHideDuration : 2000,
+        });
+      },
+      handleError(ACTION_TYPES.CLONE_PATTERN),
+    );
+  }
+
   function fetchPatterns(page, pageSize, search, sortOrder) {
     if (!search) search = "";
     if (!sortOrder) sortOrder = "";
-
     const query = `?page=${page}&page_size=${pageSize}&search=${encodeURIComponent(search)}&order=${encodeURIComponent(
       sortOrder
     )}`;
 
     updateProgress({ showProgress : true });
-
     dataFetch(
       `/api/pattern${query}`,
       { credentials : "include", },
@@ -323,10 +661,10 @@ function MesheryPatterns({
         console.log("PatternFile API", `/api/pattern${query}`);
         updateProgress({ showProgress : false });
         if (result) {
-          setPatterns(result.patterns || []);
           setPage(result.page || 0);
           setPageSize(result.page_size || 0);
           setCount(result.total_count || 0);
+          handleSetPatterns(result.patterns || [])
         }
       },
       handleError(ACTION_TYPES.FETCH_PATTERNS)
@@ -355,9 +693,14 @@ function MesheryPatterns({
     };
   }
 
-  function handleSubmit(data, id, name, type) {
+  async function handleSubmit({ data, id, name, type }) {
     updateProgress({ showProgress : true })
     if (type === FILE_OPS.DELETE) {
+      const response = await showModal(1, name)
+      if (response=="No"){
+        updateProgress({ showProgress : false })
+        return;
+      }
       dataFetch(
         `/api/pattern/${id}`,
         {
@@ -367,7 +710,17 @@ function MesheryPatterns({
         () => {
           console.log("PatternFile API", `/api/pattern/${id}`);
           updateProgress({ showProgress : false });
-          fetchPatterns(page, pageSize, search, sortOrder);
+          enqueueSnackbar(`"${name}" Design deleted`, {
+            variant : "success",
+            action : function Action(key) {
+              return (
+                <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                  <CloseIcon />
+                </IconButton>
+              );
+            },
+            autoHideDuration : 2000,
+          });
           resetSelectedRowData()();
         },
         handleError(ACTION_TYPES.DELETE_PATTERN)
@@ -385,7 +738,6 @@ function MesheryPatterns({
         () => {
           console.log("PatternFile API", `/api/pattern`);
           updateProgress({ showProgress : false });
-          fetchPatterns(page, pageSize, search, sortOrder);
         },
         handleError(ACTION_TYPES.UPDATE_PATTERN)
       );
@@ -394,7 +746,13 @@ function MesheryPatterns({
     if (type === FILE_OPS.FILE_UPLOAD || type === FILE_OPS.URL_UPLOAD) {
       let body;
       if (type === FILE_OPS.FILE_UPLOAD) {
-        body = JSON.stringify({ pattern_data : { pattern_file : data }, save : true })
+        body = JSON.stringify({
+          pattern_data : {
+            name,
+            pattern_file : data,
+          },
+          save : true
+        })
       }
       if (type === FILE_OPS.URL_UPLOAD) {
         body = JSON.stringify({ url : data, save : true })
@@ -409,7 +767,6 @@ function MesheryPatterns({
         () => {
           console.log("PatternFile API", `/api/pattern`);
           updateProgress({ showProgress : false });
-          fetchPatterns(page, pageSize, search, sortOrder);
         },
         handleError(ACTION_TYPES.UPLOAD_PATTERN)
       );
@@ -419,28 +776,34 @@ function MesheryPatterns({
   function uploadHandler(ev) {
     if (!ev.target.files?.length) return;
 
+
     const file = ev.target.files[0];
     // Create a reader
     const reader = new FileReader();
     reader.addEventListener("load", (event) => {
-      handleSubmit(
-        event.target.result,
-        "",
-        file?.name || "meshery_" + Math.floor(trueRandom() * 100),
-        FILE_OPS.URL_UPLOAD,
-      );
+      // @ts-ignore
+      handleSubmit({
+        data : event.target.result,
+        name : file?.name || getRandomName(),
+        type : FILE_OPS.FILE_UPLOAD
+      });
     });
     reader.readAsText(file);
   }
 
   function urlUploadHandler(link) {
-    handleSubmit(link, "", "meshery_" + Math.floor(trueRandom() * 100), FILE_OPS.URL_UPLOAD);
-    // console.log(link, "valid");
+    handleSubmit({
+      data : link,
+      id : "",
+      name : getRandomName(),
+      type : FILE_OPS.URL_UPLOAD
+    });
   }
+
   const columns = [
     {
       name : "name",
-      label : "Pattern Name",
+      label : "Name",
       options : {
         filter : false,
         sort : true,
@@ -499,6 +862,30 @@ function MesheryPatterns({
       },
     },
     {
+      name : "visibility",
+      label : "Visibility",
+      options : {
+        filter : false,
+        sort : true,
+        searchable : true,
+        customHeadRender : function CustomHead({ index, ...column }) {
+          return (
+            <TableCell key={index}>
+              <b>{column.label}</b>
+            </TableCell>
+          );
+        },
+        customBodyRender : function CustomBody(_, tableMeta) {
+          const visibility = patterns[tableMeta.rowIndex].visibility
+          return (
+            <div style={{ cursor : "default" }}>
+              <img className={classes.visibilityImg} src={`/static/img/${visibility}.svg`} />
+            </div>
+          );
+        },
+      },
+    },
+    {
       name : "Actions",
       options : {
         filter : false,
@@ -513,19 +900,50 @@ function MesheryPatterns({
         },
         customBodyRender : function CustomBody(_, tableMeta) {
           const rowData = patterns[tableMeta.rowIndex];
+          const visibility = patterns[tableMeta.rowIndex].visibility
           return (
             <>
-              {/* <Tooltip title="Configure">*/}
-              <IconButton onClick={() => setSelectedPattern({ pattern : patterns[tableMeta.rowIndex], show : true })}>
-                <Avatar src="/static/img/pattwhite.svg" className={classes.iconPatt} imgProps={{ height : "16px", width : "16px" }} />
-              </IconButton>
-              {/*</Tooltip> */}
-              <IconButton
-                title="Deploy"
-                onClick={() => handleDeploy(rowData.pattern_file)}
+              { visibility === VISIBILITY.PUBLISHED ? <IconButton onClick={(e) => {
+                e.stopPropagation();
+                handleClone(rowData.id, rowData.name)
+              }
+              }>
+                <CloneIcon fill="#ffffff" className={classes.iconPatt} />
+              </IconButton> :
+
+                <IconButton onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedPattern({ pattern : patterns[tableMeta.rowIndex], show : true })
+                }
+                }
+                >
+                  <Avatar src="/static/img/pattwhite.svg" className={classes.iconPatt} imgProps={{ height : "16px", width : "16px" }} />
+                </IconButton> }
+              <TooltipIcon
+                title="Validate"
+                onClick={(e) => handleVerify(e, rowData.pattern_file, rowData.id)}
               >
-                <PlayArrowIcon />
-              </IconButton>
+                <DoneIcon data-cy="verify-button" />
+              </TooltipIcon>
+
+              <TooltipIcon
+                title="Undeploy"
+                onClick={(e) => handleModalOpen(e, rowData.pattern_file, rowData.name, patternErrors.get(rowData.id), ACTIONS.UNDEPLOY)}
+              >
+                <UndeployIcon fill="#F91313" data-cy="undeploy-button" />
+              </TooltipIcon>
+              <TooltipIcon
+                title="Deploy"
+                onClick={(e) => handleModalOpen(e, rowData.pattern_file, rowData.name, patternErrors.get(rowData.id), ACTIONS.DEPLOY)}
+              >
+                <DoneAllIcon data-cy="deploy-button" />
+              </TooltipIcon>
+              <TooltipIcon
+                title="Publish"
+                onClick={(ev) => handlePublishModal(ev,rowData)}
+              >
+                <PublicIcon fill="#F91313" data-cy="publish-button" />
+              </TooltipIcon>
             </>
           );
         },
@@ -539,45 +957,56 @@ function MesheryPatterns({
     }
   });
 
-  async function showModal(count) {
+  async function showModal(count, patterns) {
+    console.log("patterns to be deleted", count, patterns);
     let response = await modalRef.current.show({
-      title : `Delete ${count ? count : ""} Pattern${count > 1 ? "s" : ''}?`,
+      title : `Delete ${count ? count : ""} Design${count > 1 ? "s" : ''}?`,
 
-      subtitle : `Are you sure you want to delete ${count > 1 ? "these" : 'this'}  ${count ? count : ""}  pattern${count > 1 ? "s" : ''}?`,
+      subtitle : `Are you sure you want to delete the ${patterns} design${count > 1 ? "s" : ''}?`,
 
       options : ["Yes", "No"],
     });
     return response;
   }
 
-  function deletePattern(id) {
-    dataFetch(
-      `/api/pattern/${id}`,
-      {
-        method : "DELETE",
-        credentials : "include",
-      },
-      () => {
-        updateProgress({ showProgress : false });
+  async function deletePatterns(patterns) {
+    const jsonPatterns = JSON.stringify(patterns)
 
-        enqueueSnackbar("Pattern deleted.", {
-          variant : "success",
-          autoHideDuration : 2000,
-          action : function Action(key) {
-            return (
-              <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
-                <CloseIcon />
-              </IconButton>
-            );
-          },
-        });
-        fetchPatterns(page, pageSize, search, sortOrder);
-      },
-      handleError("Failed to delete pattern")
+
+    updateProgress({ showProgress : true })
+    dataFetch("/api/patterns/delete", {
+      method : "POST",
+      credentials : "include",
+      body : jsonPatterns
+    },
+    () => {
+      console.log("PatternFile Delete Multiple API", `/api/pattern/delete`);
+      updateProgress({ showProgress : false });
+      setTimeout(() => {
+        enqueueSnackbar(`${patterns.patterns.length} Designs deleted`,
+          {
+            variant : "success",
+            autoHideDuration : 2000,
+            action : function Action(key) {
+              return (
+                <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                  <CloseIcon />
+                </IconButton>
+              );
+            }
+          }
+        )
+        resetSelectedRowData()()
+      }, 1200);
+    },
+    handleError(ACTION_TYPES.DELETE_PATTERN)
     );
   }
 
   const options = {
+    customToolbarSelect : (selectedRows, displayData, setSelectedRows) => (
+      <CustomToolbarSelect selectedRows={selectedRows} displayData={displayData} setSelectedRows={setSelectedRows} patterns={patterns} deletePatterns={deletePatterns} showModal={showModal}/>
+    ),
     filter : false,
     sort : !(user && user.user_id === "meshery"),
     search : !(user && user.user_id === "meshery"),
@@ -597,19 +1026,22 @@ function MesheryPatterns({
         text : "pattern(s) selected"
       }
     },
-    customToolbar : CustomToolbar(uploadHandler, urlUploadHandler),
 
     onCellClick : (_, meta) => meta.colIndex !== 3 && setSelectedRowData(patterns[meta.rowIndex]),
 
     onRowsDelete : async function handleDelete(row) {
-      let response = await showModal(Object.keys(row.lookup).length);
-      console.log(response);
-      if (response === "Yes") {
-        const fid = Object.keys(row.lookup).map(idx => patterns[idx]?.id);
-        fid.forEach(fid => deletePattern(fid));
+      const toBeDeleted = Object.keys(row.lookup).map(idx => (
+        {
+          id : patterns[idx]?.id,
+          name : patterns[idx]?.name,
+        }
+      ))
+      let response = await showModal(toBeDeleted.length, toBeDeleted.map(p => " " + p.name))
+      if (response.toLowerCase() === "yes") {
+        deletePatterns({ patterns : toBeDeleted })
       }
-      if (response === "No")
-        fetchPatterns(page, pageSize, search, sortOrder);
+      // if (response.toLowerCase() === "no")
+      // fetchPatterns(page, pageSize, search, sortOrder);
     },
 
     onTableChange : (action, tableState) => {
@@ -623,10 +1055,10 @@ function MesheryPatterns({
 
       switch (action) {
         case "changePage":
-          fetchPatterns(tableState.page, pageSize, search, sortOrder);
+          initPatternsSubscription(tableState.page.toString(), pageSize.toString(), search, sortOrder);
           break;
         case "changeRowsPerPage":
-          fetchPatterns(page, tableState.rowsPerPage, search, sortOrder);
+          initPatternsSubscription(page.toString(), tableState.rowsPerPage.toString(), search, sortOrder);
           break;
         case "search":
           if (searchTimeout.current) {
@@ -649,58 +1081,145 @@ function MesheryPatterns({
             }
           }
           if (order !== sortOrder) {
-            fetchPatterns(page, pageSize, search, order);
+            initPatternsSubscription(page.toString(), pageSize.toString(), search, order);
           }
           break;
       }
     },
+    setRowProps : (row, dataIndex, rowIndex) => {
+      return {
+        "data-cy" : `config-row-${rowIndex}`
+      }
+    },
+    setTableProps : () => {
+      return {
+        "data-cy" : "filters-grid"
+      }
+    }
   };
 
-  return (
-    <NoSsr>
-      {selectedPattern.show &&
-        <PatternForm onSubmit={handleSubmit} show={setSelectedPattern} pattern={selectedPattern.pattern} />}
+  if (loading) {
+    return <LoadingScreen animatedIcon="AnimatedMeshPattern" message="Loading Designs..." />;
+  }
 
-      {selectedRowData && Object.keys(selectedRowData).length > 0 && (
-        <YAMLEditor pattern={selectedRowData} onClose={resetSelectedRowData()} onSubmit={handleSubmit} />
-      )}
-      {
-        !selectedPattern.show && <MuiThemeProvider theme={getMuiTheme()}>
+  return (
+    <>
+      <NoSsr>
+        {selectedRowData && Object.keys(selectedRowData).length > 0 && (
+          <YAMLEditor pattern={selectedRowData} onClose={resetSelectedRowData()} onSubmit={handleSubmit} />
+        )}
+        {selectedPattern.show &&
+          <DesignConfigurator onSubmit={handleSubmit} show={setSelectedPattern} pattern={selectedPattern.pattern} />
+        }
+        <div className={classes.topToolbar} >
+          {!selectedPattern.show && (patterns.length > 0 || viewType === "table") && <div className={classes.createButton}>
+            <div>
+              <Button
+                aria-label="Add Pattern"
+                variant="contained"
+                color="primary"
+                size="large"
+                // @ts-ignore
+                onClick={() => setSelectedPattern({
+                  pattern : { id : null, name : "New Pattern", pattern_file : "name: New Pattern\nservices:" },
+                  show : true,
+                })}
+                style={{ marginRight : "2rem" }}
+              >
+                <AddIcon className={classes.addIcon} />
+                Create Design
+              </Button>
+              <Button
+                aria-label="Add Pattern"
+                variant="contained"
+                color="primary"
+                size="large"
+                // @ts-ignore
+                onClick={handleUploadImport}
+                style={{ marginRight : "2rem" }}
+              >
+                <PublishIcon className={classes.addIcon} />
+                Import Design
+              </Button>
+            </div>
+          </div>
+          }
+
+          {!selectedPattern.show &&
+            <div style={{ justifySelf : "flex-end", marginLeft : "auto", paddingRight : "1rem", paddingTop : "0.2rem" }}>
+              <CatalogFilter catalogVisibility={catalogVisibility} handleCatalogVisibility={handleCatalogVisibility} />
+            </div>
+          }
+
+          {!selectedPattern.show &&
+            <div className={classes.viewSwitchButton}>
+              <ViewSwitch view={viewType} changeView={setViewType} />
+            </div>
+          }
+        </div>
+        {
+          !selectedPattern.show && viewType === "table" &&
           <MUIDataTable
-            title={<div className={classes.tableHeader}>Patterns</div>}
+            title={<div className={classes.tableHeader}>Designs</div>}
             data={patterns}
             columns={columns}
             // @ts-ignore
             options={options}
             className={classes.muiRow}
           />
-        </MuiThemeProvider>
-      }
-      {!selectedPattern.show && <div className={classes.createButton}>
-        <Button
-          aria-label="Add Pattern"
-          variant="contained"
-          color="primary"
-          size="large"
-          // @ts-ignore
-          onClick={() => setSelectedPattern({
-            pattern : { id : "", name : "New Pattern", pattern_file : "name: New Pattern\nservices:" },
-            show : true,
-          })}
-        >
-          <AddIcon />
-          Create Pattern
-        </Button>
-      </div>}
-      <PromptComponent ref={modalRef} />
-    </NoSsr>
+
+        }
+        {
+          !selectedPattern.show && viewType==="grid" &&
+            // grid vieww
+            <MesheryPatternGrid
+              patterns={patterns}
+              handleDeploy={handleDeploy}
+              handleVerify={handleVerify}
+              handlePublish={handlePublish}
+              handleUnDeploy={handleUnDeploy}
+              handleClone={handleClone}
+              urlUploadHandler={urlUploadHandler}
+              uploadHandler={uploadHandler}
+              supportedTypes="null"
+              handleSubmit={handleSubmit}
+              setSelectedPattern={setSelectedPattern}
+              selectedPattern={selectedPattern}
+              pages={Math.ceil(count / pageSize)}
+              setPage={setPage}
+              selectedPage={page}
+              UploadImport={UploadImport}
+              fetch={() => fetchPatterns(page, pageSize, search, sortOrder)}
+              patternErrors={patternErrors}
+            />
+        }
+        <ConfirmationModal
+          open={modalOpen.open}
+          handleClose={handleModalClose}
+          submit={
+            { deploy : () => handleDeploy(modalOpen.pattern_file, modalOpen.name), unDeploy : () => handleUnDeploy(modalOpen.pattern_file, modalOpen.name) }
+          }
+          title={modalOpen.name}
+          componentCount={modalOpen.count}
+          tab={modalOpen.action}
+          validationBody={modalOpen.validationBody}
+          errors={modalOpen.errors}
+        />
+        <PublishModal open={publishModal.open} handleClose={handlePublishModalClose} pattern={publishModal.pattern} aria-label="catalog publish" handlePublish={handlePublish} />
+        <UploadImport open={importModal.open} handleClose={handleUploadImportClose} aria-label="URL upload button" handleUrlUpload={urlUploadHandler} handleUpload={uploadHandler} fetch={() => fetchPatterns(page, pageSize, search, sortOrder)} configuration="Design" />
+        <PromptComponent ref={modalRef} />
+      </NoSsr>
+    </>
   );
 }
 
-const mapDispatchToProps = (dispatch) => ({ updateProgress : bindActionCreators(updateProgress, dispatch), });
+const mapDispatchToProps = (dispatch) => ({ updateProgress : bindActionCreators(updateProgress, dispatch), toggleCatalogContent : bindActionCreators(toggleCatalogContent, dispatch) });
 
 const mapStateToProps = (state) => {
-  return { user : state.get("user")?.toObject(), };
+  return {
+    user : state.get("user")?.toObject(), selectedK8sContexts : state.get("selectedK8sContexts"),
+    catalogVisibility : state.get("catalogVisibility")
+  };
 };
 
 // @ts-ignore

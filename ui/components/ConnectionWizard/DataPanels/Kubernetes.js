@@ -13,7 +13,7 @@ import { updateProgress, updateK8SConfig } from "../../../lib/store";
 import AdapterChip from "./AdapterChip"
 import { deleteKubernetesConfig, pingKubernetes } from "../helpers/kubernetesHelpers"
 import {
-  successHandlerGenerator, errorHandlerGenerator, closeButtonForSnackbarAction, showProgress, hideProgress
+  successHandlerGenerator, errorHandlerGenerator, closeButtonForSnackbarAction
 } from "../helpers/common"
 
 const styles = theme => ({
@@ -59,21 +59,21 @@ const KubernetesDataPanel = ({
 
 
   const handleKubernetesDelete = () => {
-    showProgress()
+    // showProgress()
 
     const handlerCb = () => resetKubernetesConfig()
 
     deleteKubernetesConfig(
-      successHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Kubernetes config successfully removed", handlerCb),
+      successHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Kubernetes config removed", handlerCb),
       errorHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Not able to remove config")
     )
   }
 
   const handleKubernetesClick = () => {
-    showProgress()
+    // showProgress()
     pingKubernetes(
-      successHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Kubernetes succesfully pinged", () => hideProgress()),
-      errorHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Kubernetes not pinged successfully", () => hideProgress())
+      successHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Kubernetes pinged"/*, () => hideProgress()*/),
+      errorHandlerGenerator(enqueueSnackbar, closeButtonForSnackbarAction(closeSnackbar), "Kubernetes not pinged"/*, () => hideProgress()*/)
     )
 
   }

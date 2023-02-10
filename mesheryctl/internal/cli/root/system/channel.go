@@ -32,7 +32,7 @@ var err error
 
 var showForAllContext bool
 
-// PrintChannelAndVersionToStdout to return curren release channel details
+// PrintChannelAndVersionToStdout to return current release channel details
 func PrintChannelAndVersionToStdout(ctx config.Context, contextName string) string {
 	return fmt.Sprintf("Context: %v\nChannel: %v\nVersion: %v", contextName, ctx.Channel, ctx.Version)
 }
@@ -46,8 +46,14 @@ var viewCmd = &cobra.Command{
 	Use:   "view",
 	Short: "view release channel and version",
 	Long:  `View release channel and version of context in focus`,
-	Args:  cobra.NoArgs,
+	Example: `
+// View current release channel
+mesheryctl system channel view
+	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) != 0 {
+			return errors.New(utils.SystemChannelSubError("this command takes no arguments.\n", "view"))
+		}
 		mctlCfg, err = config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
 			log.Fatalln(err, "error processing config")
@@ -85,7 +91,19 @@ var setCmd = &cobra.Command{
 	Use:   "set [stable|stable-version|edge|edge-version]",
 	Short: "set release channel and version",
 	Long:  `Set release channel and version of context in focus`,
-	Args:  cobra.ExactArgs(1),
+	Example: `
+// Subscribe to release channel or version
+mesheryctl system channel set [stable|stable-version|edge|edge-version]
+	`,
+	Args: func(_ *cobra.Command, args []string) error {
+		const errMsg = `Please provide either 'stable' or 'edge' release channel. Usage: mesheryctl system channel set [stable|stable-version|edge|edge-version]`
+		if len(args) == 0 {
+			return fmt.Errorf("release channel not specified\n\n%v", errMsg)
+		} else if len(args) > 1 {
+			return fmt.Errorf("too many arguments.\n\n%v", errMsg)
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		mctlCfg, err = config.GetMesheryCtl(viper.GetViper())
@@ -104,7 +122,7 @@ var setCmd = &cobra.Command{
 		channelNameSeperated := strings.SplitN(channelVersion, "-", 2)
 
 		if !IsBetaOrStable(channelNameSeperated[0]) {
-			return errors.New("No release channel subscription found." +
+			return errors.New("No release channel subscription found. " +
 				"Please subscribe to either the 'stable' or 'edge' release channel")
 		}
 
@@ -152,7 +170,19 @@ var switchCmd = &cobra.Command{
 	Use:   "switch [stable|stable-version|edge|edge-version]",
 	Short: "switch release channel and version",
 	Long:  `Switch release channel and version of context in focus`,
-	Args:  cobra.ExactArgs(1),
+	Example: `
+// Switch between release channels
+mesheryctl system channel switch [stable|stable-version|edge|edge-version]
+	`,
+	Args: func(_ *cobra.Command, args []string) error {
+		const errMsg = `Please provide either 'stable' or 'edge' release channel. Usage: mesheryctl system channel switch [stable|stable-version|edge|edge-version]`
+		if len(args) == 0 {
+			return fmt.Errorf("release channel not specified\n\n%v", errMsg)
+		} else if len(args) > 1 {
+			return fmt.Errorf("too many arguments.\n\n%v", errMsg)
+		}
+		return nil
+	},
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		//Check prerequisite
 		hcOptions := &HealthCheckOptions{
@@ -207,8 +237,25 @@ var channelCmd = &cobra.Command{
 	Use:   "channel",
 	Short: "Switch between release channels",
 	Long:  `Subscribe to a release channel. Choose between either 'stable' or 'edge' channels.`,
-	Args:  cobra.NoArgs,
+	Example: `
+// Subscribe to release channel or version
+mesheryctl system channel
+// To set the channel
+mesheryctl system channel set [stable|stable-version|edge|edge-version]
+// To pin/set the channel to a specific version
+mesheryctl system channel set stable-v0.6.0
+// To view release channel and version
+mesheryctl system channel view
+// To switch release channel and version
+mesheryctl system channel switch [stable|stable-version|edge|edge-version]
+	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return errors.New(utils.SystemChannelSubError("please specify a flag or subcommand. Use 'mesheryctl system channel --help' to display user guide.\n", "channel"))
+		}
+		if ok := utils.IsValidSubcommand(availableSubcommands, args[0]); !ok {
+			return errors.New(utils.SystemChannelSubError(fmt.Sprintf("'%s' is an invalid subcommand. Please provide required options from [set/switch/view]. Use 'mesheryctl system channel --help' to display usage guide.\n", args[0]), "channel"))
+		}
 		mctlCfg, err = config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
 			log.Fatalln(err, "error processing config")

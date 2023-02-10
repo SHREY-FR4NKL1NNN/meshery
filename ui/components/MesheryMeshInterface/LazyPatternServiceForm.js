@@ -16,9 +16,11 @@ import {
   getHumanReadablePatternServiceName as getReadableItemName
 } from "./helpers";
 import { isEmptyObj } from "../../utils/utils";
+import { useSnackbar } from 'notistack';
+import { iconMedium } from "../../css/icons.styles";
 
 const useStyles = makeStyles((theme) => ({
-  root : {
+  accordionRoot : {
     width : "100%",
   },
   heading : {
@@ -78,13 +80,7 @@ export async function getWorkloadTraitAndType(schemaSet) {
 export default function LazyPatternServiceForm(props) {
   const [expanded, setExpanded] = React.useState(false);
   const [schemaSet, setSchemaSet] = React.useState({});
-
-  // useEffect(() => {
-  //   if (props?.schemaSet?.type === "addon") {
-  //     expand(true)
-  //   }
-  // },[])
-
+  const { enqueueSnackbar } = useSnackbar();
   const classes = useStyles();
 
   async function expand(state) {
@@ -107,23 +103,15 @@ export default function LazyPatternServiceForm(props) {
         });
       }
     } catch (error) {
-      console.error(error);
+      console.error("error getting schema:", { error })
+      enqueueSnackbar(`error getting schema: ${error?.message}`, { variant : "error" })
     }
   }
 
-  // if (props?.schemaSet?.type === "addon") {
-  //   if (isEmptyObj(schemaSet)) {
-  //     return <CircularProgress />
-  //   } else {
-  //     // @ts-ignore
-  //     return <PatternServiceForm {...props} schemaSet={schemaSet} />
-  //   }
-  // }
-
   return (
-    <div className={classes.root}>
+    <div className={classes.accordionRoot}>
       <Accordion elevation={0} expanded={expanded} onChange={() => expand(!expanded)}>
-        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon style={iconMedium} />}>
           <Typography className={classes.heading}>{getReadableItemName(props?.schemaSet?.workload)}</Typography>
         </AccordionSummary>
         <LazyAccordionDetails expanded={expanded}>

@@ -27,7 +27,7 @@ You can retrieve your authentication token from either of Meshery's two clients:
   <br/>
   <pre class="codeblock-pre">
   <div class="codeblock"><div class="clipboardjs">
-  mesheryctl system config --token [path-to-file]
+  mesheryctl system config [aks|eks|gke|minikube] --token [path-to-file]
   
   </div></div>
   </pre>
@@ -51,3 +51,5 @@ Guides to using Meshery's various features and components.
 {% endcapture %}
 
 {% include suggested-reading.html diffName="true" isDiffTag="true" diffTag=tag %}
+{% include related-discussions.html tag="mesheryctl" %}
+

@@ -1,40 +1,56 @@
 import React from "react";
 import { connect } from "react-redux";
 import NoSsr from "@material-ui/core/NoSsr";
-import {
-  withStyles, Button, Divider, MenuItem, TextField, Grid
-} from "@material-ui/core";
+import { withStyles, Button, Divider, MenuItem, TextField, Grid } from "@material-ui/core";
 import { blue } from "@material-ui/core/colors";
 import PropTypes from "prop-types";
 import { withRouter } from "next/router";
 import SettingsIcon from "@material-ui/icons/Settings";
 import MesheryAdapterPlayComponent from "./MesheryAdapterPlayComponent";
+import { bindActionCreators } from "redux";
+import { setAdapter } from "../lib/store";
 
 const styles = (theme) => ({
   icon : { fontSize : 20, },
-  root : { padding : theme.spacing(0),
-    marginBottom : theme.spacing(2), },
-  buttons : { display : "flex",
-    justifyContent : "flex-end", },
-  button : { marginTop : theme.spacing(3),
-    marginLeft : theme.spacing(1), },
+  playRoot : {
+    padding : theme.spacing(0),
+    marginBottom : theme.spacing(2),
+  },
+  buttons : {
+    display : "flex",
+    justifyContent : "flex-end",
+  },
+  button : {
+    marginTop : theme.spacing(3),
+    marginLeft : theme.spacing(1),
+  },
   margin : { margin : theme.spacing(1), },
-  alreadyConfigured : { textAlign : "center",
-    padding : theme.spacing(20), },
-  colorSwitchBase : { color : blue[300],
-    "&$colorChecked" : { color : blue[500],
-      "& + $colorBar" : { backgroundColor : blue[500], }, }, },
+  alreadyConfigured : {
+    textAlign : "center",
+    padding : theme.spacing(20),
+  },
+  colorSwitchBase : {
+    color : blue[300],
+    "&$colorChecked" : {
+      color : blue[500],
+      "& + $colorBar" : { backgroundColor : blue[500], },
+    },
+  },
   colorBar : {},
   colorChecked : {},
-  uploadButton : { margin : theme.spacing(1),
-    marginTop : theme.spacing(3), },
+  uploadButton : {
+    margin : theme.spacing(1),
+    marginTop : theme.spacing(3),
+  },
   fileLabel : { width : "100%", },
   editorContainer : { width : "100%", },
   deleteLabel : { paddingRight : theme.spacing(2), },
   alignRight : { textAlign : "right", },
-  expTitleIcon : { width : theme.spacing(3),
+  expTitleIcon : {
+    width : theme.spacing(3),
     display : "inline",
-    verticalAlign : "middle", },
+    verticalAlign : "middle",
+  },
   expIstioTitleIcon : {
     width : theme.spacing(2),
     display : "inline",
@@ -42,59 +58,63 @@ const styles = (theme) => ({
     marginLeft : theme.spacing(0.5),
     marginRight : theme.spacing(0.5),
   },
-  expTitle : { display : "inline",
+  expTitle : {
+    display : "inline",
     verticalAlign : "middle",
-    marginLeft : theme.spacing(1), },
-  paneSection : { backgroundColor : "#fff",
+    marginLeft : theme.spacing(1),
+  },
+  paneSection : {
+    backgroundColor : theme.palette.secondary.elevatedComponents,
     padding : theme.spacing(2.5),
-    borderRadius : 4, },
+    borderRadius : 4,
+  },
 });
 
 class MesheryPlayComponent extends React.Component {
   constructor(props) {
     super(props);
 
-    const { k8sconfig, meshAdapters } = props;
+    const { meshAdapters } = props;
     let adapter = {};
-    if (meshAdapters && meshAdapters.length > 0) {
+    if (meshAdapters && meshAdapters.size > 0) {
       adapter = meshAdapters[0];
     }
     this.state = {
-      k8sconfig,
-      kts : new Date(),
-
-      meshAdapters,
-      mts : new Date(),
-
       adapter,
     };
   }
 
-  static getDerivedStateFromProps(props, state) {
-    let { meshAdapters, meshAdaptersts, k8sconfig } = props;
-    const st = {};
-    if (meshAdaptersts > state.mts) {
-      st.meshAdapters = meshAdapters;
-      st.mts = meshAdaptersts;
-      if (meshAdapters && meshAdapters.length > 0) {
-        st.adapter = meshAdapters[0];
+  handleRouteChange = () => {
+    const queryParam = this.props?.router?.query?.adapter;
+    if (queryParam) {
+      const selectedAdapter = this.props.meshAdapters.find(({ adapter_location }) => adapter_location === queryParam);
+      if (selectedAdapter) {
+        this.setState({ adapter : selectedAdapter });
       }
+    } else if (this.props.meshAdapters.size > 0) {
+      this.setState({ adapter : this.props.meshAdapters.get(0) });
     }
-    if (k8sconfig.ts > state.kts) {
-      st.inClusterConfig = k8sconfig.inClusterConfig;
-      st.k8sfile = k8sconfig.k8sfile;
-      st.contextName = k8sconfig.contextName;
-      st.clusterConfigured = k8sconfig.clusterConfigured;
-      st.configuredServer = k8sconfig.configuredServer;
-      st.kts = props.ts;
-    }
+  };
 
-    return st;
+  componentDidMount() {
+    const { router } = this.props;
+    router.events.on("routeChangeComplete", this.handleRouteChange);
+  }
+
+  componentDidUpdate(prevProps) {
+    // update the adapter when the meshadapters props are changed
+    if (prevProps.meshAdapters?.size !== this.props.meshAdapters?.size && this.props.meshAdapters.size > 0) {
+      this.handleRouteChange();
+    }
+  }
+
+  componentWillUnmount() {
+    this.props.router.events.off("routeChangeComplete", this.handleRouteChange);
   }
 
   handleConfigure = () => {
     this.props.router.push("/settings#service-mesh");
-  }
+  };
 
   pickImage(adapter) {
     const { classes } = this.props;
@@ -110,11 +130,12 @@ class MesheryPlayComponent extends React.Component {
   handleAdapterChange = () => {
     const self = this;
     return (event) => {
-      const { meshAdapters } = self.state;
+      const { setAdapter, meshAdapters } = self.props;
       if (event.target.value !== "") {
         const selectedAdapter = meshAdapters.filter(({ adapter_location }) => adapter_location === event.target.value);
-        if (typeof selectedAdapter !== "undefined" && selectedAdapter.length === 1) {
-          self.setState({ adapter : selectedAdapter[0] });
+        if (selectedAdapter && selectedAdapter.size === 1) {
+          self.setState({ adapter : selectedAdapter.get(0) });
+          setAdapter({ selectedAdapter : selectedAdapter.get(0).name });
         }
       }
     };
@@ -144,10 +165,10 @@ class MesheryPlayComponent extends React.Component {
   }
 
   render() {
-    const { classes, k8sconfig, meshAdapters } = this.props;
+    const { classes, meshAdapters } = this.props;
     let { adapter } = this.state;
 
-    if (k8sconfig.clusterConfigured === false || meshAdapters.length === 0) {
+    if (meshAdapters.size === 0) {
       return (
         <NoSsr>
           <React.Fragment>
@@ -161,6 +182,7 @@ class MesheryPlayComponent extends React.Component {
         </NoSsr>
       );
     }
+
     if (this.props.adapter && this.props.adapter !== "") {
       const indContent = this.renderIndividualAdapter();
       if (indContent !== "") {
@@ -170,11 +192,10 @@ class MesheryPlayComponent extends React.Component {
 
     const self = this;
     const imageIcon = self.pickImage(adapter);
-    let adapCount = 0;
     return (
       <NoSsr>
         <React.Fragment>
-          <div className={classes.root}>
+          <div className={classes.playRoot}>
             <Grid container>
               <Grid item xs={12} className={classes.paneSection}>
                 <TextField
@@ -183,12 +204,23 @@ class MesheryPlayComponent extends React.Component {
                   name="adapter_name"
                   label="Select Service Mesh Type"
                   fullWidth
-                  value={adapter && adapter.adapter_location
-                    ? adapter.adapter_location
-                    : ""}
+                  value={adapter && adapter.adapter_location ? adapter.adapter_location : ""}
                   margin="normal"
                   variant="outlined"
                   onChange={this.handleAdapterChange()}
+                  SelectProps={{
+                    MenuProps : {
+                      anchorOrigin : {
+                        vertical : "bottom",
+                        horizontal : "left",
+                      },
+                      transformOrigin : {
+                        vertical : "top",
+                        horizontal : "left",
+                      },
+                      getContentAnchorEl : null,
+                    }
+                  }}
                 >
                   {meshAdapters.map((ada) => (
                     <MenuItem key={`${ada.adapter_location}_${new Date().getTime()}`} value={ada.adapter_location}>
@@ -203,17 +235,8 @@ class MesheryPlayComponent extends React.Component {
             </Grid>
           </div>
           <Divider variant="fullWidth" light />
-          <Divider variant="fullWidth" light />
-          {meshAdapters.forEach((adap) => {
-            if (adap.adapter_location === this.props.adapter) {
-              adapter = adap;
-              meshAdapters.forEach((ad) => {
-                if (ad.name == adap.name) adapCount += 1;
-              });
-            }
-          })}
           {adapter && adapter.adapter_location && (
-            <MesheryAdapterPlayComponent adapter={adapter} adapCount={adapCount} adapter_icon={imageIcon} />
+            <MesheryAdapterPlayComponent adapter={adapter} adapter_icon={imageIcon} />
           )}
         </React.Fragment>
       </NoSsr>
@@ -221,15 +244,19 @@ class MesheryPlayComponent extends React.Component {
   }
 }
 
-MesheryPlayComponent.propTypes = { classes : PropTypes.object.isRequired, };
+MesheryPlayComponent.propTypes = { classes : PropTypes.object.isRequired };
 
-const mapDispatchToProps = () => ({});
+const mapDispatchToProps = (dispatch) => ({
+  setAdapter : bindActionCreators(setAdapter, dispatch),
+});
 
 const mapStateToProps = (state) => {
-  const k8sconfig = state.get("k8sConfig").toJS();
-  const meshAdapters = state.get("meshAdapters").toJS();
+  const k8sconfig = state.get("k8sConfig");
+  const meshAdapters = state.get("meshAdapters");
   const meshAdaptersts = state.get("meshAdaptersts");
-  return { k8sconfig, meshAdapters, meshAdaptersts };
+  const selectedAdapter = state.get("selectedAdapter");
+  return { k8sconfig, meshAdapters, meshAdaptersts, selectedAdapter };
 };
 
 export default withStyles(styles)(connect(mapStateToProps, mapDispatchToProps)(withRouter(MesheryPlayComponent)));
+

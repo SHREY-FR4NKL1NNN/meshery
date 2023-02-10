@@ -4,9 +4,8 @@ title: Meshery Adapter for Consul
 name: Meshery Adapter for Consul
 mesh_name: Consul
 earliest_version: v1.8.4
-port: 10002/tcp
+port: 10002/gRPC
 project_status: stable
-adapter_version: v0.5.2
 lab: consul-meshery-adapter
 github_link: https://github.com/meshery/meshery-consul
 image: /assets/img/service-meshes/consul.svg
@@ -14,13 +13,30 @@ image: /assets/img/service-meshes/consul.svg
 permalink: service-meshes/adapters/consul
 ---
 
+{% assign sorted_tests_group = site.compatibility | group_by: "meshery-component" %}
+{% for group in sorted_tests_group %}
+      {% if group.name == "meshery-consul" %}
+        {% assign items = group.items | sort: "meshery-component-version" | reverse %}
+        {% for item in items %}
+          {% if item.meshery-component-version != "edge" %}
+            {% if item.overall-status == "passing" %}
+              {% assign adapter_version_dynamic = item.meshery-component-version %}
+              {% break %}
+            {% elsif item.overall-status == "failing" %}
+              {% continue %}
+            {% endif %}
+          {% endif %}
+        {% endfor %} 
+      {% endif %}
+{% endfor %}
+
 {% include adapter-status.html %}
 
 {% include adapter-labs.html %}
 
 ## Lifecycle management
 
-The {{page.name}} can install **{{page.version}}** of the {{page.mesh_name}} service mesh.
+The {{page.name}} can install **{{page.earliest_version}}** of the {{page.mesh_name}} service mesh.
 
 ### Install {{ page.mesh_name }}
 
@@ -30,7 +46,7 @@ The {{page.name}} can install **{{page.version}}** of the {{page.mesh_name}} ser
   <img style="width:500px;" src="{{ site.baseurl }}/assets/img/adapters/consul/consul-adapter.png" />
 </a>
 
-##### Click on (+) and choose the {{page.version}} of the {{page.mesh_name}} service mesh.
+##### Click on (+) and choose the {{page.earliest_version}} of the {{page.mesh_name}} service mesh.
 
 <a href="{{ site.baseurl }}/assets/img/adapters/consul/consul-install.png">
   <img style="width:500px;" src="{{ site.baseurl }}/assets/img/adapters/consul/consul-install.png" />
@@ -68,7 +84,7 @@ The {{ page.name }} will connect to {{ page.name }}'s Prometheus and Grafana ins
 
 ### Architecture
 
-[![Consul Service Mesh Archicture]({{ site.baseurl }}/service-meshes/adapters/consul/service-mesh-architecture-consul.png)]({{ site.baseurl }}/service-meshes/adapters/consul/service-mesh-architecture-consul.png)
+[![Consul Service Mesh Architecture]({{ site.baseurl }}/service-meshes/adapters/consul/service-mesh-architecture-consul.png)]({{ site.baseurl }}/service-meshes/adapters/consul/service-mesh-architecture-consul.png)
 
 ### Suggested Topics
 

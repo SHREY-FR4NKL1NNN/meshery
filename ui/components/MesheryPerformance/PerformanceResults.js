@@ -1,23 +1,57 @@
 //@ts-check
 import React, { useEffect, useState, useRef } from "react";
 import {
-  NoSsr, TableCell, IconButton, Typography, Paper
+  NoSsr, TableCell, IconButton, Paper, Popper, ClickAwayListener, Fade
 } from "@material-ui/core";
 import { connect } from "react-redux";
 import { bindActionCreators } from "redux";
 import MUIDataTable from "mui-datatables";
+import Tabs from '@material-ui/core/Tabs';
+import Tab from '@material-ui/core/Tab';
 import Moment from "react-moment";
 import { withSnackbar } from "notistack";
+import { withStyles } from '@material-ui/core/styles';
 import CloseIcon from "@material-ui/icons/Close";
 import { updateResultsSelection, clearResultsSelection, updateProgress } from "../../lib/store";
 import TableSortLabel from "@material-ui/core/TableSortLabel";
 // import dataFetch from "../../lib/data-fetch";
 import CustomToolbarSelect from "../CustomToolbarSelect";
 import MesheryChart from "../MesheryChart";
-import GrafanaCustomCharts from "../GrafanaCustomCharts";
+import GrafanaCustomCharts from "../telemetry/grafana/GrafanaCustomCharts";
 import GenericModal from "../GenericModal";
 import BarChartIcon from '@material-ui/icons/BarChart';
+import InfoIcon from '@material-ui/icons/Info';
 import fetchPerformanceResults from "../graphql/queries/PerformanceResultQuery";
+import subscribePerformanceProfiles from "../graphql/subscriptions/PerformanceResultSubscription";
+import NodeDetails from "../NodeDetails";
+import ReplyIcon from '@material-ui/icons/Reply';
+import FacebookIcon from "./assets/facebookIcon";
+import LinkedinIcon from "./assets/linkedinIcon"
+import TwitterIcon from "./assets/twitterIcon";
+import {
+  TwitterShareButton,
+  LinkedinShareButton,
+  FacebookShareButton,
+
+} from "react-share"
+
+const COL_MAPPING = {
+  QPS : 3,
+  P99 : 6
+}
+
+const styles = (theme) => ({
+  socialIcon : {
+    margin : theme.spacing(0.4)
+  },
+  share : {
+    transform : "scaleX(-1)",
+    color : theme.palette.secondary.icon2,
+  },
+  paper : {
+    padding : theme.spacing(1)
+  },
+})
 
 function generateResultsForDisplay(results) {
   if (Array.isArray(results)) {
@@ -50,9 +84,10 @@ function generateResultsForDisplay(results) {
   return [];
 }
 
-function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
+function generateColumnsForDisplay(sortOrder, setSelectedProfileIdxForChart, setSelectedProfileIdxForNodeDetails, classes, handleSocialExpandClick, handleClickAway, socialExpand, anchorEl, socialMessage) {
   const columns = [
-    { name : "name",
+    {
+      name : "name",
       label : "Name",
       options : {
         filter : false,
@@ -67,8 +102,10 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
             </TableCell>
           );
         },
-      }, },
-    { name : "mesh",
+      },
+    },
+    {
+      name : "mesh",
       label : "Mesh",
       options : {
         filter : false,
@@ -83,8 +120,10 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
             </TableCell>
           );
         },
-      }, },
-    { name : "test_start_time",
+      },
+    },
+    {
+      name : "test_start_time",
       label : "Start Time",
       options : {
         filter : false,
@@ -102,8 +141,10 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
         customBodyRender : function CustomBody(value) {
           return <Moment format="LLLL">{value}</Moment>;
         },
-      }, },
-    { name : "qps",
+      },
+    },
+    {
+      name : "qps",
       label : "QPS",
       options : {
         filter : false,
@@ -116,8 +157,10 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
             </TableCell>
           );
         },
-      }, },
-    { name : "duration",
+      },
+    },
+    {
+      name : "duration",
       label : "Duration",
       options : {
         filter : false,
@@ -130,9 +173,11 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
             </TableCell>
           );
         },
-      }, },
+      },
+    },
 
-    { name : "p50",
+    {
+      name : "p50",
       label : "P50",
       options : {
         filter : false,
@@ -145,9 +190,11 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
             </TableCell>
           );
         },
-      }, },
+      },
+    },
 
-    { name : "p99_9",
+    {
+      name : "p99_9",
       label : "P99.9",
       options : {
         filter : false,
@@ -160,8 +207,10 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
             </TableCell>
           );
         },
-      }, },
-    { name : "Details",
+      },
+    },
+    {
+      name : "Chart",
       options : {
         filter : false,
         sort : false,
@@ -175,12 +224,88 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
         },
         customBodyRender : function CustomBody(value, tableMeta) {
           return (
-            <IconButton aria-label="more" color="inherit" onClick={() => setSelectedProfileIdx(tableMeta.rowIndex)}>
+            <IconButton aria-label="more" color="inherit" onClick={() => setSelectedProfileIdxForChart(tableMeta.rowIndex)}>
               <BarChartIcon />
             </IconButton>
           );
         },
-      }, },
+      },
+    },
+    {
+      name : "Node Details",
+      options : {
+        filter : false,
+        sort : false,
+        searchable : false,
+        customHeadRender : function CustomHead({ index, ...column }) {
+          return (
+            <TableCell key={index}>
+              <b>{column.label}</b>
+            </TableCell>
+          );
+        },
+        customBodyRender : function CustomBody(value, tableMeta) {
+          return (
+            <IconButton aria-label="more" color="inherit" onClick={() => setSelectedProfileIdxForNodeDetails(tableMeta.rowIndex)}>
+              <InfoIcon />
+            </IconButton>
+          );
+        },
+      },
+    },
+    {
+      name : "Share Results",
+      options : {
+        filter : false,
+        sort : false,
+        searchable : false,
+        customHeadRender : function CustomHead({ index, ...column }) {
+          return (
+            <TableCell key={index}>
+              <b>{column.label}</b>
+            </TableCell>
+          );
+        },
+        customBodyRender : function CustomBody(value, tableMeta) {
+          return (
+            <>
+              <IconButton
+                aria-label="Share"
+                onClick={(e) => handleSocialExpandClick(e, tableMeta)}
+              >
+                <ReplyIcon className={classes.share} />
+              </IconButton>
+              <Popper open={socialExpand[tableMeta.rowIndex]} anchorEl={anchorEl[tableMeta.rowIndex]} transition >
+                {({ TransitionProps }) => (
+                  <ClickAwayListener onClickAway={() => handleClickAway(tableMeta.rowIndex)}>
+                    <Fade {...TransitionProps} timeout={350}>
+                      <Paper className={classes.paper}>
+                        <TwitterShareButton className={classes.socialIcon} url={"https://meshery.io"} title={socialMessage}
+                          hashtags={["opensource"]}
+                        >
+                          {/* <img src={`/static/img/twitter.svg`} /> */}
+                          <TwitterIcon />
+                        </TwitterShareButton>
+                        <LinkedinShareButton className={classes.socialIcon} url={"https://meshery.io"} summary={socialMessage}>
+                          {/* <img src={`/static/img/linkedin.svg`} /> */}
+                          <LinkedinIcon />
+                        </LinkedinShareButton>
+                        <FacebookShareButton className={classes.socialIcon} url={"https://meshery.io"} quote={socialMessage}
+                          hashtag={"#opensource"}
+                        >
+                          {/* <img src={`/static/img/facebook.svg`} /> */}
+                          <FacebookIcon />
+                        </FacebookShareButton>
+                      </Paper>
+                    </Fade>
+                  </ClickAwayListener>
+                )}
+              </Popper>
+            </>
+          )
+        }
+      }
+    }
   ];
 
   return columns.map((column) => {
@@ -190,6 +315,10 @@ function generateColumnsForDisplay(sortOrder, setSelectedProfileIdx) {
 
     return column;
   });
+}
+
+function getSocialMessageForPerformanceTest(rps, percentile) {
+  return `I achieved ${rps.trim()} RPS running my service at a P99.9 of ${percentile} ms using @mesheryio with @smp_spec! Find out how fast your service is with`
 }
 
 function generateSelectedRows(results_selection, page, pageSize) {
@@ -211,8 +340,86 @@ function generateSelectedRows(results_selection, page, pageSize) {
   return rowsSelected;
 }
 
-function ResultChart({ result }) {
+function ResultChart({ result, handleTabChange, tabValue }) {
   if (!result) return <div />;
+
+  // const getMuiTheme = () => createTheme({
+  //   overrides : {
+  //     MuiTab : {
+  //       textColorInherit : {
+  //         textTransform : "none",
+  //         backgroundColor : "#eaeff1"
+  //       }
+  //     }
+  //   }
+  // })
+  const row = result.runner_results;
+  const boardConfig = result.server_board_config;
+  const serverMetrics = result.server_metrics;
+  const startTime = new Date(row.StartTime);
+  const endTime = new Date(startTime.getTime() + row.ActualDuration / 1000000);
+
+  return (
+
+    <Paper
+      style={{
+        width : "100%",
+        maxWidth : "90vw",
+        padding : "0.5rem"
+      }}
+    >
+      <Tabs
+        value={tabValue}
+        onChange={handleTabChange}
+        TabIndicatorProps={{
+          style : {
+            backgroundColor : "#00B39F"
+          }
+        }}
+      >
+        <Tab label="Performance Chart" />
+        <Tab label="Node Details" />
+      </Tabs>
+
+      {
+        (tabValue == 0) ?
+          <div>
+            <div>
+              <MesheryChart
+                rawdata={[result && result.runner_results ? result : {}]}
+                data={[result && result.runner_results ? result.runner_results : {}]}
+              />
+            </div>
+            {boardConfig && boardConfig !== null && Object.keys(boardConfig).length > 0 && (
+              <div>
+                <GrafanaCustomCharts
+                  boardPanelConfigs={[boardConfig]}
+                  // @ts-ignore
+                  boardPanelData={[serverMetrics]}
+                  startDate={startTime}
+                  from={startTime.getTime().toString()}
+                  endDate={endTime}
+                  to={endTime.getTime().toString()}
+                  liveTail={false}
+                />
+              </div>
+            )}
+          </div>
+          : (tabValue == 1) ?
+            <div>
+              <NodeDetails result={row} />
+            </div>
+            : <div />
+      }
+    </Paper>
+
+  );
+}
+
+function ResultNodeDetails({ result, handleTabChange, tabValue }) {
+  console.log("results: ", result)
+  if (!result) return <div />
+  const chartData = result.runner_results;
 
   const row = result.runner_results;
   const boardConfig = result.server_board_config;
@@ -221,32 +428,57 @@ function ResultChart({ result }) {
   const endTime = new Date(startTime.getTime() + row.ActualDuration / 1000000);
   return (
     <Paper
-      style={{ width : "100%",
+      style={{
+        width : "100%",
         maxWidth : "90vw",
-        padding : "0.5rem" }}
+        padding : "0.5rem"
+      }}
     >
-      <div>
-        <Typography variant="h6" gutterBottom align="center">Performance Graph</Typography>
-        <MesheryChart
-          rawdata={[result && result.runner_results ? result : {}]}
-          data={[result && result.runner_results ? result.runner_results : {}]} />
-      </div>
-      {boardConfig && boardConfig !== null && Object.keys(boardConfig).length > 0 && (
-        <div>
-          <GrafanaCustomCharts
-            boardPanelConfigs={[boardConfig]}
-            // @ts-ignore
-            boardPanelData={[serverMetrics]}
-            startDate={startTime}
-            from={startTime.getTime().toString()}
-            endDate={endTime}
-            to={endTime.getTime().toString()}
-            liveTail={false}
-          />
-        </div>
-      )}
+      <Tabs
+        value={tabValue}
+        onChange={handleTabChange}
+        TabIndicatorProps={{
+          style : {
+            backgroundColor : "#00B39F"
+          }
+        }}
+      >
+        <Tab label="Performance Chart" />
+        <Tab label="Node Details" />
+      </Tabs>
+      {
+        (tabValue == 1) ?
+          <div>
+            <NodeDetails result={chartData} />
+          </div>
+          :
+          (tabValue == 0) ?
+            <div>
+              <div>
+                <MesheryChart
+                  rawdata={[result && result.runner_results ? result : {}]}
+                  data={[result && result.runner_results ? result.runner_results : {}]}
+                />
+              </div>
+              {boardConfig && boardConfig !== null && Object.keys(boardConfig).length > 0 && (
+                <div>
+                  <GrafanaCustomCharts
+                    boardPanelConfigs={[boardConfig]}
+                    // @ts-ignore
+                    boardPanelData={[serverMetrics]}
+                    startDate={startTime}
+                    from={startTime.getTime().toString()}
+                    endDate={endTime}
+                    to={endTime.getTime().toString()}
+                    liveTail={false}
+                  />
+                </div>
+              )}
+            </div>
+            : <div />
+      }
     </Paper>
-  );
+  )
 }
 
 /**
@@ -274,6 +506,7 @@ function MesheryResults({
   user,
   CustomHeader = <div />,
   elevation = 4,
+  classes
 }) {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
@@ -281,29 +514,22 @@ function MesheryResults({
   const [count, setCount] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [results, setResults] = useState([]);
-  const [selectedRowData, setSelectedRowData] = useState();
+  const [selectedRowChart, setSelectedRowChart] = useState();
+  const [selectedRowNodeDetails, setSelectedRowNodeDetails] = useState();
+  const [tabValue, setTabValue] = useState(0);
+  const [socialExpand, setSocialExpand] = useState([false]);
+  const [anchorEl, setAnchorEl] = useState([]);
+  const [socialMessage, setSocialMessage] = useState();
 
   const searchTimeout = useRef();
 
   useEffect(() => {
     fetchResults(page, pageSize, search, sortOrder);
-  }, [page, pageSize, search, sortOrder]);
 
-  function fetchResults(page, pageSize, search, sortOrder) {
-    if (!search) search = "";
-    if (!sortOrder) sortOrder = "";
-
-    updateProgress({ showProgress : true });
-
-    fetchPerformanceResults({ selector : {
-      pageSize : `${pageSize}`,
-      page : `${page}`,
-      search : `${encodeURIComponent(search)}`,
-      order : `${encodeURIComponent(sortOrder)}`
-    },
-    profileID : endpoint.split("/")[endpoint.split("/").length - 2] }).subscribe({ next : (res) => {
+    const subscription = subscribePerformanceProfiles((res) => {
       // @ts-ignore
-      let result = res?.fetchResults
+      console.log(res);
+      let result = res?.subscribePerfResults
       if (typeof result !== "undefined") {
         updateProgress({ showProgress : false })
 
@@ -316,14 +542,78 @@ function MesheryResults({
           setPageSize(result.page_size);
         }
       }
-    },
-    error : handleError, });
+    }, {
+      selector : {
+        pageSize : `${pageSize}`,
+        page : `${page}`,
+        search : `${encodeURIComponent(search)}`,
+        order : `${encodeURIComponent(sortOrder)}`
+      },
+      profileID : endpoint.split("/")[endpoint.split("/").length - 2]
+    })
+    return () => {
+      subscription.dispose();
+    };
+  }, [page, pageSize, search, sortOrder]);
+
+
+  const handleSocialExpandClick = (e, tableMeta) => {
+    let socialExpandUpdate = [...socialExpand];
+    socialExpandUpdate[tableMeta.rowIndex] = !socialExpand[tableMeta.rowIndex];
+    setSocialExpand(socialExpandUpdate);
+
+    let anchorElUpdate = [...anchorEl];
+    anchorElUpdate[tableMeta.rowIndex] = e.currentTarget;
+    setAnchorEl(anchorElUpdate);
+    setSocialMessage(getSocialMessageForPerformanceTest(tableMeta.rowData[COL_MAPPING.QPS], tableMeta.rowData[COL_MAPPING.P99]));
+  }
+
+  const handleClickAway = (index) => {
+    let socialExpandUpdate = [...socialExpand];
+    socialExpandUpdate[index] = !socialExpand[index];
+    setSocialExpand(socialExpandUpdate);
+  }
+
+  function fetchResults(page, pageSize, search, sortOrder) {
+    if (!search) search = "";
+    if (!sortOrder) sortOrder = "";
+
+    updateProgress({ showProgress : true });
+
+    fetchPerformanceResults({
+      selector : {
+        pageSize : `${pageSize}`,
+        page : `${page}`,
+        search : `${encodeURIComponent(search)}`,
+        order : `${encodeURIComponent(sortOrder)}`
+      },
+      profileID : endpoint.split("/")[endpoint.split("/").length - 2]
+    }).subscribe({
+      next : (res) => {
+        // @ts-ignore
+        let result = res?.fetchResults
+        if (typeof result !== "undefined") {
+          updateProgress({ showProgress : false })
+
+          if (result) {
+            setCount(result.total_count);
+            setPageSize(result.page_size);
+            setSortOrder(sortOrder);
+            setSearch(search);
+            setResults(result.results);
+            setPageSize(result.page_size);
+          }
+        }
+      },
+      error : handleError,
+    });
   }
 
   function handleError(error) {
     updateProgress({ showProgress : false });
 
-    enqueueSnackbar(`There was an error fetching results: ${error}`, { variant : "error",
+    enqueueSnackbar(`There was an error fetching results: ${error}`, {
+      variant : "error",
       action : function Action(key) {
         return (
           <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
@@ -331,10 +621,17 @@ function MesheryResults({
           </IconButton>
         );
       },
-      autoHideDuration : 8000, });
+      autoHideDuration : 8000,
+    });
   }
 
-  const columns = generateColumnsForDisplay(sortOrder, (idx) => setSelectedRowData(results[idx]));
+  const columns = generateColumnsForDisplay(sortOrder, (idx) => {
+    setSelectedRowChart(results[idx])
+    setTabValue(0)
+  }, (idx) => {
+    setSelectedRowNodeDetails(results[idx])
+    setTabValue(1)
+  }, classes, handleSocialExpandClick, handleClickAway, socialExpand, anchorEl, socialMessage);
 
   const options = {
     elevation : elevation,
@@ -416,6 +713,10 @@ function MesheryResults({
     },
   };
 
+  function handleTabChange(event, newValue) {
+    setTabValue(newValue);
+  }
+
   return (
     <NoSsr>
       <MUIDataTable
@@ -427,18 +728,38 @@ function MesheryResults({
       />
 
       <GenericModal
-        open={!!selectedRowData}
+        open={!!selectedRowChart}
         // @ts-ignore
-        Content={<ResultChart result={selectedRowData} />}
-        handleClose={() => setSelectedRowData(undefined)}
+        Content={
+          <ResultChart
+            result={selectedRowChart}
+            handleTabChange={handleTabChange}
+            tabValue={tabValue}
+          />}
+        handleClose={() => setSelectedRowChart(undefined)}
       />
+
+      <GenericModal
+        open={!!selectedRowNodeDetails}
+        // @ts-ignore
+        Content={
+          <ResultNodeDetails
+            result={selectedRowNodeDetails}
+            handleTabChange={handleTabChange}
+            tabValue={tabValue}
+          />}
+        handleClose={() => setSelectedRowNodeDetails(undefined)}
+      />
+
     </NoSsr>
   );
 }
 
-const mapDispatchToProps = (dispatch) => ({ updateResultsSelection : bindActionCreators(updateResultsSelection, dispatch),
+const mapDispatchToProps = (dispatch) => ({
+  updateResultsSelection : bindActionCreators(updateResultsSelection, dispatch),
   clearResultsSelection : bindActionCreators(clearResultsSelection, dispatch),
-  updateProgress : bindActionCreators(updateProgress, dispatch), });
+  updateProgress : bindActionCreators(updateProgress, dispatch),
+});
 
 const mapStateToProps = (state) => {
   const startKey = state.get("results").get("startKey");
@@ -457,4 +778,4 @@ const mapStateToProps = (state) => {
 };
 
 // @ts-ignore
-export default connect(mapStateToProps, mapDispatchToProps)(withSnackbar(MesheryResults));
+export default connect(mapStateToProps, mapDispatchToProps)(withSnackbar(withStyles(styles)(MesheryResults)));

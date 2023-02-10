@@ -79,6 +79,7 @@ Restart your WSL VM before moving forward.
   ```bash
     git clone https://github.com/rbenv/rbenv.git ~/.rbenv
   ```
+  <strong>Note:</strong> Change bashrc with your shell specific rc file, for eg: if you are using zsh then the filename is zshrc.
 - Setting the path
   ```bash
     echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bashrc
@@ -91,7 +92,6 @@ Restart your WSL VM before moving forward.
   ```bash
     source ~/.bashrc
   ```
-  <strong>Note:</strong> Change bashrc with your shell specific rc file, for eg: if you are using zsh then the filename is zshrc.
 - Check installation
   ```bash
     type rbenv
@@ -102,7 +102,7 @@ Restart your WSL VM before moving forward.
 - rbenv install version
 
 ```bash
-  rbenv install 2.5.1
+  rbenv install 2.7.5
 ```
 
 - To list all the versions that can be installed
@@ -150,22 +150,22 @@ Restart your WSL VM before moving forward.
 
 - Serve the code locally
   ```bash
-  $ make site
+  $ make docs
   ```
 - If that gives an error run:
 
   ```bash
-    $ bundle exec jekyll serve
+  $ bundle exec jekyll serve --drafts --config _config_dev.yml
   ```
 
-  _Note: From the Makefile, this command is actually running `$ bundle exec jekyll serve --drafts --livereload`. There are two Jekyll configuration, `jekyll serve` for developing locally and `jekyll build` when you need to generate the site artifacts for production._
+  _From the Makefile, this command is actually running `$ bundle exec jekyll serve --drafts --livereload --config _config_dev.yml`. If this command causes errors try running the server without Livereload with this command: `$ bundle exec jekyll serve --drafts --config _config_dev.yml`. Just keep in mind you will have to manually restart the server to reflect any changes made without Livereload. There are two Jekyll configuration, `jekyll serve` for developing locally and `jekyll build` when you need to generate the site artefacts for production._
 
 ### Using Docker
 
 If you've Docker and `make` installed in your system, then you can serve the site locally
 
 ```
-$ make docker-docs
+$ make docker
 ```
 
 This doesn't require the need for installing Jekyll and Ruby in your system
@@ -191,15 +191,24 @@ source "https://rubygems.org"
 ruby '2.7.1' //to any version you have installed
 ```
 
-Automatically the `Gemfile.lock` will update once the `make site` is given (for Windows, run `bundle exec jekyll serve` if WSL2 isn't present)
+Automatically the `Gemfile.lock` will update once the `make docs` is given (for Windows, run `bundle exec jekyll serve` if WSL2 isn't present)
 
 **WARNING: If you have followed the third step then please don't commit the changes made on `Gemfile` and `Gemfile.lock` in your branch to preserve integrity, else the CI action will fail to generate the site preview during PR**.
+
+
+### Make Necessary Changes
+- Make changes as required by the issue you are solving
+- Be sure check that your changes appear correctly locally by serving the site using `make docs`
+
+#### Note
+- If the issue requires making new doc page that replaces the old page, please don't forget to add a redirect link on the old page. This redirect link field should have the link of the new page created.
+
 
 ### Create a Pull Request
 
 - After making changes, don't forget to commit with the sign-off flag (-s)!
   ```bash
-  $ commit -s -m “my commit message w/signoff”
+  $ git commit -s -m “my commit message w/signoff”
   ```
 - Once all changes have been committed, push the changes.
   ```bash
@@ -248,20 +257,24 @@ Whenever the code tags are detected, the clipboard javascript file is automatica
 
 ## Documentation Contribution Flow Summary
 
+**NOTE: For contributing `mesheryctl` reference section, refer [Contributing CLI](/contributing-cli)**
+
+
 The following is a concise summary of the steps to contribute to Meshery documentation.
 
 1. Create a fork, if you have not already, by following the steps described [here](CONTRIBUTING-gitflow.md)
-1. In the local copy of your fork, navigate to the docs folder.
+2. In the local copy of your fork, navigate to the docs folder.
    `cd docs`
-1. Create and checkout a new branch to make changes within
+3. Create and checkout a new branch to make changes within
    `git checkout -b <my-changes>`
-1. Edit/add documentation.
+4. Edit/add documentation.
    `vi <specific page>.md`
-1. Run site locally to preview changes.
-   `make site`
-1. Commit, [sign-off](#commit-signing), and push changes to your remote branch.
+5. Add redirect link on the old page (only when a new page is created that replaces the old page)
+5. Run site locally to preview changes.
+   `make docs`
+6. Commit, [sign-off](#commit-signing), and push changes to your remote branch.
    `git push origin <my-changes>`
-1. Open a pull request (in your web browser) against the repo: https://github.com/layer5io/meshery.
+7. Open a pull request (in your web browser) against the repo: https://github.com/layer5io/meshery.
 
 ### Table of Contents in Sidebar (toc)
 
@@ -341,3 +354,4 @@ The assign tag is used to create a new variable. It is written in the following 
 ```
 
 {% include suggested-reading.html %}
+

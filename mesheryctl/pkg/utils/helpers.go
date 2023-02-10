@@ -13,13 +13,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
-	"github.com/layer5io/meshery/models"
+	"github.com/layer5io/meshery/server/models"
+	"github.com/layer5io/meshkit/logger"
 	"github.com/layer5io/meshkit/utils"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/browser"
@@ -45,11 +47,35 @@ const (
 	MeshsyncURL   = baseConfigURL + "samples/meshery_v1alpha1_meshsync.yaml"
 
 	// Documentation URLs
-	docsBaseURL    = "https://docs.meshery.io/"
-	rootUsageURL   = docsBaseURL + "reference/mesheryctl"
-	perfUsageURL   = docsBaseURL + "reference/mesheryctl/perf"
-	systemUsageURL = docsBaseURL + "reference/mesheryctl/system"
-	meshUsageURL   = docsBaseURL + "reference/mesheryctl/mesh"
+	docsBaseURL       = "https://docs.meshery.io/"
+	rootUsageURL      = docsBaseURL + "reference/mesheryctl"
+	perfUsageURL      = docsBaseURL + "reference/mesheryctl/perf"
+	systemUsageURL    = docsBaseURL + "reference/mesheryctl/system"
+	systemStopURL     = docsBaseURL + "reference/mesheryctl/system/stop"
+	systemUpdateURL   = docsBaseURL + "reference/mesheryctl/system/update"
+	systemResetURL    = docsBaseURL + "reference/mesheryctl/system/reset"
+	systemStatusURL   = docsBaseURL + "reference/mesheryctl/system/status"
+	systemRestartURL  = docsBaseURL + "reference/mesheryctl/system/restart"
+	meshUsageURL      = docsBaseURL + "reference/mesheryctl/mesh"
+	expUsageURL       = docsBaseURL + "reference/mesheryctl/exp"
+	filterUsageURL    = docsBaseURL + "reference/mesheryctl/exp/filter"
+	patternUsageURL   = docsBaseURL + "reference/mesheryctl/pattern"
+	appUsageURL       = docsBaseURL + "reference/mesheryctl/app"
+	contextDeleteURL  = docsBaseURL + "reference/mesheryctl/system/context/delete"
+	contextViewURL    = docsBaseURL + "reference/mesheryctl/system/context/view"
+	contextCreateURL  = docsBaseURL + "reference/mesheryctl/system/context/create"
+	contextUsageURL   = docsBaseURL + "reference/mesheryctl/system/context"
+	channelUsageURL   = docsBaseURL + "reference/mesheryctl/system/channel"
+	channelSetURL     = docsBaseURL + "reference/mesheryctl/system/channel/set"
+	channelSwitchURL  = docsBaseURL + "reference/mesheryctl/system/channel/switch"
+	channelViewURL    = docsBaseURL + "reference/mesheryctl/system/channel/view"
+	providerUsageURL  = docsBaseURL + "reference/mesheryctl/system/provider"
+	providerViewURL   = docsBaseURL + "reference/mesheryctl/system/provider/view"
+	providerListURL   = docsBaseURL + "reference/mesheryctl/system/provider/list"
+	providerSetURL    = docsBaseURL + "reference/mesheryctl/system/provider/set"
+	providerResetURL  = docsBaseURL + "reference/mesheryctl/system/provider/reset"
+	providerSwitchURL = docsBaseURL + "reference/mesheryctl/system/provider/switch"
+	tokenUsageURL     = docsBaseURL + "reference/mesheryctl/system/token"
 
 	// Meshery Server Location
 	EndpointProtocol = "http"
@@ -58,15 +84,40 @@ const (
 type cmdType string
 
 const (
-	cmdRoot   cmdType = "root"
-	cmdPerf   cmdType = "perf"
-	cmdMesh   cmdType = "mesh"
-	cmdSystem cmdType = "system"
+	cmdRoot           cmdType = "root"
+	cmdPerf           cmdType = "perf"
+	cmdMesh           cmdType = "mesh"
+	cmdSystem         cmdType = "system"
+	cmdSystemStop     cmdType = "system stop"
+	cmdSystemUpdate   cmdType = "system update"
+	cmdSystemReset    cmdType = "system reset"
+	cmdSystemStatus   cmdType = "system status"
+	cmdSystemRestart  cmdType = "system restart"
+	cmdExp            cmdType = "exp"
+	cmdFilter         cmdType = "filter"
+	cmdPattern        cmdType = "pattern"
+	cmdApp            cmdType = "app"
+	cmdContext        cmdType = "context"
+	cmdContextDelete  cmdType = "delete"
+	cmdContextCreate  cmdType = "create"
+	cmdContextView    cmdType = "context view"
+	cmdChannel        cmdType = "channel"
+	cmdChannelSet     cmdType = "channel set"
+	cmdChannelSwitch  cmdType = "channel switch"
+	cmdChannelView    cmdType = "channel view"
+	cmdProvider       cmdType = "provider"
+	cmdProviderSet    cmdType = "provider set"
+	cmdProviderSwitch cmdType = "provider switch"
+	cmdProviderView   cmdType = "provider view"
+	cmdProviderList   cmdType = "provider list"
+	cmdProviderReset  cmdType = "provider reset"
+	cmdToken          cmdType = "token"
 )
 
 const (
-	HelmChartURL  = "https://meshery.io/charts/"
-	HelmChartName = "meshery"
+	HelmChartURL          = "https://meshery.io/charts/"
+	HelmChartName         = "meshery"
+	HelmChartOperatorName = "meshery-operator"
 )
 
 var (
@@ -74,8 +125,12 @@ var (
 	ResetFlag bool
 	// SkipResetFlag indicates if fetching the updated manifest files is required
 	SkipResetFlag bool
+	// MesheryDefaultHost is the default host on which Meshery is exposed
+	MesheryDefaultHost = "localhost"
+	// MesheryDefaultPort is the default port on which Meshery is exposed
+	MesheryDefaultPort = 9081
 	// MesheryEndpoint is the default URL in which Meshery is exposed
-	MesheryEndpoint = "http://localhost:9081"
+	MesheryEndpoint = fmt.Sprintf("http://%s:%v", MesheryDefaultHost, MesheryDefaultPort)
 	// MesheryFolder is the default relative location of the meshery config
 	// related configuration files.
 	MesheryFolder = ".meshery"
@@ -112,10 +167,8 @@ var (
 	KubeConfigYaml = "kubeconfig.yaml"
 	// ViperCompose is an instance of viper for docker-compose
 	ViperCompose = viper.New()
-	// ViperDocker is an instance of viper for the meshconfig file when the platform is docker
-	ViperDocker = viper.New()
-	// ViperK8s is an instance of viper for the meshconfig file when the platform is kubernetes
-	ViperK8s = viper.New()
+	// ViperMeshconfig is an instance of viper for the meshconfig file
+	ViperMeshconfig = viper.New()
 	// SilentFlag skips waiting for user input and proceeds with default options
 	SilentFlag bool
 	// PlatformFlag sets the platform for the initial config file
@@ -125,21 +178,27 @@ var (
 	KubeConfig string
 	// KeepNamespace indicates if the namespace should be kept when Meshery is uninstalled
 	KeepNamespace bool
+	// TokenFlag sets token location passed by user with --token
+	TokenFlag = "Not Set"
+	// global logger variable
+	Log logger.Handler
 )
 
 var CfgFile string
 
-// ListOfAdapters returns the list of adapters available
-var ListOfAdapters = []string{"meshery-app-mesh", "meshery-istio", "meshery-linkerd", "meshery-consul", "meshery-nsm", "meshery-kuma", "meshery-cpx", "meshery-osm", "meshery-traefik-mesh", "meshery-nginx-sm"}
+// TODO: add "meshery-perf" as a component
+
+// ListOfComponents returns the list of components available
+var ListOfComponents = []string{"meshery-app-mesh", "meshery-istio", "meshery-linkerd", "meshery-consul", "meshery-nsm", "meshery-kuma", "meshery-osm", "meshery-traefik-mesh", "meshery-nginx-sm", "meshery-cilium"}
 
 // TemplateContext is the template context provided when creating a config file
 var TemplateContext = config.Context{
-	Endpoint: EndpointProtocol + "://localhost:9081",
-	Token:    "Default",
-	Platform: "kubernetes",
-	Adapters: ListOfAdapters,
-	Channel:  "stable",
-	Version:  "latest",
+	Endpoint:   EndpointProtocol + "://localhost:9081",
+	Token:      "Default",
+	Platform:   "kubernetes",
+	Components: ListOfComponents,
+	Channel:    "stable",
+	Version:    "latest",
 }
 
 // TemplateToken is the template token provided when creating a config file
@@ -259,7 +318,7 @@ func UploadFileWithParams(uri string, params map[string]string, paramName, path 
 		return nil, err
 	}
 
-	request, err := http.NewRequest("POST", uri, body)
+	request, err := NewRequest("POST", uri, body)
 	if err != nil {
 		return nil, err
 	}
@@ -347,21 +406,6 @@ func ValidateURL(URL string) error {
 	return nil
 }
 
-// ReadToken returns a map of the token passed in
-func ReadToken(filepath string) (map[string]string, error) {
-	file, err := os.ReadFile(filepath)
-	if err != nil {
-		err = errors.Wrap(err, "could not read token:")
-		return nil, err
-	}
-	var tokenObj map[string]string
-	if err := json.Unmarshal(file, &tokenObj); err != nil {
-		err = errors.Wrap(err, "token file invalid:")
-		return nil, err
-	}
-	return tokenObj, nil
-}
-
 // TruncateID shortens an id to 8 characters
 func TruncateID(id string) string {
 	ShortenedID := id[0:8]
@@ -426,6 +470,83 @@ func StringInSlice(str string, slice []string) bool {
 		}
 	}
 	return false
+}
+
+// GetID returns a array of IDs from meshery server endpoint /api/{configurations}
+func GetID(configuration string) ([]string, error) {
+	url := MesheryEndpoint + "/api/" + configuration + "?page_size=10000"
+	configType := configuration + "s"
+	var idList []string
+	client := &http.Client{}
+	req, err := NewRequest("GET", url, nil)
+	if err != nil {
+		return idList, err
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return idList, err
+	}
+	if res.StatusCode != 200 {
+		return idList, errors.Errorf("Response Status Code %d, possible invalid ID", res.StatusCode)
+	}
+
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return idList, err
+	}
+	var dat map[string]interface{}
+	if err = json.Unmarshal(body, &dat); err != nil {
+		return idList, errors.Wrap(err, "failed to unmarshal response body")
+	}
+	if dat == nil {
+		return idList, errors.New("no data found")
+	}
+	if dat[configType] == nil {
+		return idList, errors.New("no results found")
+	}
+	for _, config := range dat[configType].([]interface{}) {
+		idList = append(idList, config.(map[string]interface{})["id"].(string))
+	}
+	return idList, nil
+}
+
+// Delete configuration from meshery server endpoint /api/{configurations}/{id}
+func DeleteConfiguration(id string, configuration string) error {
+	url := MesheryEndpoint + "/api/" + configuration + "/" + id
+	client := &http.Client{}
+	req, err := NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != 200 {
+		return errors.Errorf("Response Status Code %d, possible invalid ID", res.StatusCode)
+	}
+	return nil
+}
+
+// Valid - Check the args and configuration are valid.
+func Valid(args string, configuration string) (string, bool, error) {
+	isID := false
+	configID, err := GetID(configuration)
+	if err == nil {
+		for _, id := range configID {
+			if strings.HasPrefix(id, args) {
+				args = id
+			}
+		}
+	}
+	isID, err = regexp.MatchString("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[8|9|aA|bB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}$", args)
+	if err != nil {
+		return "", false, err
+	}
+	return args, isID, nil
 }
 
 // AskForInput asks the user for an input and checks if it is in the available values
@@ -508,16 +629,11 @@ func CreateDefaultSpinner(suffix string, finalMsg string) *spinner.Spinner {
 	return s
 }
 
-func GetSessionData(mctlCfg *config.MesheryCtlConfig, tokenPath string) (*models.Preference, error) {
+func GetSessionData(mctlCfg *config.MesheryCtlConfig) (*models.Preference, error) {
 	path := mctlCfg.GetBaseMesheryURL() + "/api/system/sync"
 	method := "GET"
 	client := &http.Client{}
-	req, err := http.NewRequest(method, path, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	err = AddAuthDetails(req, tokenPath)
+	req, err := NewRequest(method, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -532,10 +648,11 @@ func GetSessionData(mctlCfg *config.MesheryCtlConfig, tokenPath string) (*models
 	if err != nil {
 		return nil, err
 	}
+
 	prefs := &models.Preference{}
 	err = utils.Unmarshal(string(body), prefs)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("Failed to process JSON data. Please sign into Meshery")
 	}
 
 	return prefs, nil
@@ -553,9 +670,10 @@ func ContainsStringPrefix(arr []string, str string) bool {
 }
 
 // TransformYAML takes in:
-// 	yamlByt - YAML Byte slice that needs to be modified
+//
+//	yamlByt - YAML Byte slice that needs to be modified
 //	transform - function that will be executed on that value, the returned value will replace the current value
-// 	keys - takes in a series of keys which are supposed to be nested, numbers can also be passed to access an array
+//	keys - takes in a series of keys which are supposed to be nested, numbers can also be passed to access an array
 func TransformYAML(yamlByt []byte, transform func(interface{}) (interface{}, error), keys ...string) ([]byte, error) {
 	var data map[string]interface{}
 
@@ -776,10 +894,13 @@ func ConvertMapInterfaceMapString(v interface{}) interface{} {
 
 // SetOverrideValues returns the value overrides based on current context to install/upgrade helm chart
 func SetOverrideValues(ctx *config.Context, mesheryImageVersion string) map[string]interface{} {
-	// first initialize all the adapters' "enabled" field to false
-	// this matches to the adapters listed in install/kubernetes/helm/meshery/values.yaml
+	// first initialize all the components' "enabled" field to false
+	// this matches to the components listed in install/kubernetes/helm/meshery/values.yaml
 	valueOverrides := map[string]interface{}{
 		"meshery-istio": map[string]interface{}{
+			"enabled": false,
+		},
+		"meshery-cilium": map[string]interface{}{
 			"enabled": false,
 		},
 		"meshery-linkerd": map[string]interface{}{
@@ -803,15 +924,15 @@ func SetOverrideValues(ctx *config.Context, mesheryImageVersion string) map[stri
 		"meshery-traefik-mesh": map[string]interface{}{
 			"enabled": false,
 		},
-		"meshery-cpx": map[string]interface{}{
+		"meshery-app-mesh": map[string]interface{}{
 			"enabled": false,
 		},
 	}
 
-	// set the "enabled" field to true only for the adapters listed in the context
-	for _, adapter := range ctx.GetAdapters() {
-		if _, ok := valueOverrides[adapter]; ok {
-			valueOverrides[adapter] = map[string]interface{}{
+	// set the "enabled" field to true only for the components listed in the context
+	for _, component := range ctx.GetComponents() {
+		if _, ok := valueOverrides[component]; ok {
+			valueOverrides[component] = map[string]interface{}{
 				"enabled": true,
 			}
 		}
@@ -822,5 +943,24 @@ func SetOverrideValues(ctx *config.Context, mesheryImageVersion string) map[stri
 		"tag": ctx.GetChannel() + "-" + mesheryImageVersion,
 	}
 
+	// set the provider
+	if ctx.GetProvider() != "" {
+		valueOverrides["env"] = map[string]interface{}{
+			"PROVIDER": ctx.GetProvider(),
+		}
+	}
+
 	return valueOverrides
+}
+
+// CheckFileExists checks if the given file exists in system or not
+func CheckFileExists(name string) (bool, error) {
+	_, err := os.Stat(name)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, fmt.Errorf("%s does not exist", name)
+	}
+	return false, errors.Wrap(err, fmt.Sprintf("Failed to read/fetch the file %s", name))
 }

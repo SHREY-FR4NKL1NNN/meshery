@@ -16,7 +16,7 @@ import TableSortLabel from '@material-ui/core/TableSortLabel'
 import dataFetch from '../lib/data-fetch';
 import CustomToolbarSelect from './CustomToolbarSelect';
 import MesheryChart from './MesheryChart';
-import GrafanaCustomCharts from './GrafanaCustomCharts';
+import GrafanaCustomCharts from './telemetry/grafana/GrafanaCustomCharts';
 import MesheryResultDialog from './MesheryResultDialog';
 
 
@@ -75,23 +75,25 @@ class MesheryResults extends Component {
       self.props.updateProgress({ showProgress : true });
 
       const endpoint = self.props.endpoint || "/api/perf/profile/result";
-      dataFetch(`${endpoint}${query}`, { credentials : 'same-origin',
-        method : 'GET',
-        credentials : 'include', }, (result) => {
-        console.log("Results API",`${endpoint}${query}`)
-        self.props.updateProgress({ showProgress : false });
-        // console.log(`received results: ${JSON.stringify(result)}`);
-        if (typeof result !== 'undefined') {
-          this.setState({
-            results : result.results,
-            search,
-            sortOrder,
-            page : result.page,
-            pageSize : result.page_size,
-            count : result.total_count,
-          });
-        }
-      }, self.handleError);
+      dataFetch(`${endpoint}${query}`,
+        {
+          method : 'GET',
+          credentials : 'include',
+        }, (result) => {
+          console.log("Results API",`${endpoint}${query}`)
+          self.props.updateProgress({ showProgress : false });
+          // console.log(`received results: ${JSON.stringify(result)}`);
+          if (typeof result !== 'undefined') {
+            this.setState({
+              results : result.results,
+              search,
+              sortOrder,
+              page : result.page,
+              pageSize : result.page_size,
+              count : result.total_count,
+            });
+          }
+        }, self.handleError);
     }
 
     handleError = (error) => {

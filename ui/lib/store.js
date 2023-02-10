@@ -1,5 +1,5 @@
 import { createStore, applyMiddleware } from 'redux'
-import { composeWithDevTools } from 'redux-devtools-extension'
+import { composeWithDevTools } from '@redux-devtools/extension'
 import thunkMiddleware from 'redux-thunk'
 import { fromJS } from 'immutable'
 
@@ -10,14 +10,8 @@ const initialState = fromJS({
     isBeta : false,
   },
   user : {},
-  k8sConfig : {
-    inClusterConfig : false,
-    k8sfile : '',
-    contextName : '',
-    clusterConfigured : false,
-    configuredServer : '',
-    ts : new Date(),
-  },
+  k8sConfig : [], // k8sconfig stores kubernetes cluster configs
+  selectedK8sContexts : ["all"], // The selected k8s context on which the operations should be performed
   loadTest : {
     testName : '',
     meshName : '',
@@ -58,7 +52,19 @@ const initialState = fromJS({
   anonymousUsageStats : true,
   anonymousPerfResults : true,
   showProgress : false,
-
+  isDrawerCollapsed: false,
+  selectedAdapter : '',
+  events:[],
+  catalogVisibility: true,
+  extensionType: '',
+  capabilitiesRegistry: null,
+  telemetryURLs: {
+    grafana: [],
+    prometheus: []
+  },
+  // global gql-subscriptions
+  operatorState: null,
+  meshSyncState: null,
 });
 
 export const actionTypes = {
@@ -67,6 +73,7 @@ export const actionTypes = {
   UPDATE_USER : 'UPDATE_USER',
   UPDATE_BETA_BADGE : 'UPDATE_BETA_BADGE',
   UPDATE_CLUSTER_CONFIG : 'UPDATE_CLUSTER_CONFIG',
+  SET_K8S_CONTEXT : 'SET_K8S_CONTEXT',
   UPDATE_LOAD_TEST_DATA : 'UPDATE_LOAD_TEST_DATA',
   UPDATE_ADAPTERS_INFO : 'UPDATE_ADAPTERS_INFO',
   // UPDATE_MESH_RESULTS: 'UPDATE_MESH_RESULTS',
@@ -80,7 +87,16 @@ export const actionTypes = {
   UPDATE_ANONYMOUS_USAGE_STATS : 'UPDATE_ANONYMOUS_USAGE_STATS',
   UPDATE_ANONYMOUS_PERFORMANCE_RESULTS : 'UPDATE_ANONYMOUS_PERFORMANCE_RESULTS',
   UPDATE_PROGRESS : 'UPDATE_PROGRESS',
+  TOOGLE_DRAWER : 'TOOGLE_DRAWER',
+  SET_ADAPTER : 'SET_ADAPTER',
+  UPDATE_EVENTS : 'UPDATE_EVENTS',
+  SET_CATALOG_CONTENT : 'SET_CATALOG_CONTENT',
+  SET_OPERATOR_SUBSCRIPTION: 'SET_OPERATOR_SUBSCRIPTION',
+  SET_MESHSYNC_SUBSCRIPTION: 'SET_MESHSYNC_SUBSCRIPTION',
   // UPDATE_SMI_RESULT: 'UPDATE_SMI_RESULT',
+  UPDATE_EXTENSION_TYPE: 'UPDATE_EXTENSION_TYPE',
+  UPDATE_CAPABILITY_REGISTRY: 'UPDATE_CAPABILITY_REGISTRY',
+  UPDATE_TELEMETRY_URLS : 'UPDATE_TELEMETRY_URLS',
 };
 
 // REDUCERS
@@ -109,9 +125,10 @@ export const reducer = (state = initialState, action) => {
       // console.log(`received an action to update user: ${JSON.stringify(action.user)} and New state: ${JSON.stringify(state.mergeDeep({ user: action.user }))}`);
       return state.mergeDeep({ user : action.user });
     case actionTypes.UPDATE_CLUSTER_CONFIG:
-      action.k8sConfig.ts = new Date();
-      // console.log(`received an action to update k8sconfig: ${JSON.stringify(action.k8sConfig)} and New state: ${JSON.stringify(state.mergeDeep({ user: action.k8sConfig }))}`);
-      return state.mergeDeep({ k8sConfig : action.k8sConfig });
+      // console.log(`received an action to update k8sconfig: ${JSON.stringify(action.k8sConfig)} and New state: ${JSON.stringify(state.mergeDeep({ k8sConfig: action.k8sConfig }))}`);
+      return state.merge({ k8sConfig : action.k8sConfig });
+    case actionTypes.SET_K8S_CONTEXT:
+      return state.merge({ selectedK8sContexts : action.selectedK8sContexts });
     case actionTypes.UPDATE_LOAD_TEST_DATA:
       // console.log(`received an action to update k8sconfig: ${JSON.stringify(action.loadTest)} and New state: ${JSON.stringify(state.mergeDeep({ user: action.loadTest }))}`);
       return state.updateIn(['loadTest'], val => fromJS(action.loadTest));
@@ -166,6 +183,11 @@ export const reducer = (state = initialState, action) => {
     case actionTypes.UPDATE_PROGRESS:
       return state.mergeDeep({ showProgress : action.showProgress });
 
+    case actionTypes.TOOGLE_DRAWER:
+      return state.mergeDeep({ isDrawerCollapsed : action.isDrawerCollapsed });
+
+    case actionTypes.SET_ADAPTER:
+      return state.mergeDeep({ selectedAdapter : action.selectedAdapter });   
       // case actionTypes.UPDATE_SMI_RESULT:
       //   console.log(`received an action to update smi result`,action.smi_result);
       //   if(action.smi_result!==undefined)
@@ -173,6 +195,26 @@ export const reducer = (state = initialState, action) => {
       //   else
       //     return state
 
+    case actionTypes.UPDATE_EVENTS:
+      return state.merge({ events : action.events })
+
+    case actionTypes.SET_CATALOG_CONTENT:
+      return state.mergeDeep({ catalogVisibility : action.catalogVisibility })
+
+    case actionTypes.SET_OPERATOR_SUBSCRIPTION: 
+      return state.merge({operatorState: action.operatorState});
+
+    case actionTypes.SET_MESHSYNC_SUBSCRIPTION: 
+      return state.merge({meshSyncState: action.meshSyncState});
+
+    case actionTypes.UPDATE_EXTENSION_TYPE:
+        return state.merge({ extensionType: action.extensionType });
+
+    case actionTypes.UPDATE_CAPABILITY_REGISTRY: 
+      return state.merge({capabilitiesRegistry: action.capabilitiesRegistry})
+    
+    case actionTypes.UPDATE_TELEMETRY_URLS:
+      return state.updateIn(['telemetryURLs'], val => fromJS(action.telemetryURLs));
     default:
       return state;
   }
@@ -202,8 +244,11 @@ export const updateUser = ({ user }) => dispatch => {
 }
 
 export const updateK8SConfig = ({ k8sConfig }) => dispatch => {
-  console.log("Update K8s config action");
   return dispatch({ type : actionTypes.UPDATE_CLUSTER_CONFIG, k8sConfig });
+}
+
+export const setK8sContexts = ({  selectedK8sContexts}) => dispatch => {
+  return dispatch({ type : actionTypes.SET_K8S_CONTEXT, selectedK8sContexts });
 }
 
 export const updateLoadTestData = ({ loadTest }) => dispatch => {
@@ -247,6 +292,41 @@ export const updateStaticPrometheusBoardConfig = ({ staticPrometheusBoardConfig 
   return dispatch({ type : actionTypes.UPDATE_STATIC_BOARD_CONFIG, staticPrometheusBoardConfig });
 }
 
+export const toggleDrawer = ({isDrawerCollapsed}) => dispatch => {
+  return dispatch({ type : actionTypes.TOOGLE_DRAWER, isDrawerCollapsed });
+}
+
+export const setAdapter = ({selectedAdapter}) => dispatch => {
+  return dispatch({ type : actionTypes.SET_ADAPTER, selectedAdapter });
+}
+
+export const updateEvents = ({ events }) => dispatch => {
+  return dispatch({ type: actionTypes.UPDATE_EVENTS, events });
+}
+
+export const toggleCatalogContent = ({ catalogVisibility }) => dispatch => {
+  return dispatch({ type: actionTypes.SET_CATALOG_CONTENT, catalogVisibility });
+}
+
+export const setOperatorSubscription = ({operatorState}) => dispatch => {
+  return dispatch({type: actionTypes.SET_OPERATOR_SUBSCRIPTION, operatorState})
+}
+
+export const setMeshsyncSubscription = ({meshSyncState}) => dispatch => {
+  return dispatch({type: actionTypes.SET_MESHSYNC_SUBSCRIPTION, meshSyncState})
+}
+
+export const updateExtensionType = ({ extensionType }) => dispatch => {
+  return dispatch({type: actionTypes.UPDATE_EXTENSION_TYPE, extensionType})
+}
+
+export const updateCapabilities = ({capabilitiesRegistry}) => dispatch => {
+  return dispatch({type: actionTypes.UPDATE_CAPABILITY_REGISTRY, capabilitiesRegistry})
+}
+
+export const updateTelemetryUrls = ({ telemetryURLs }) => dispatch => {
+  return dispatch({type: actionTypes.UPDATE_TELEMETRY_URLS, telemetryURLs })
+}
 // export const updateSMIResults = ({smi_result}) => dispatch => {
 //   console.log("invoking the updateSMIResults action creator. . .",smi_result);
 //   return dispatch({ type: actionTypes.UPDATE_SMI_RESULT, smi_result });

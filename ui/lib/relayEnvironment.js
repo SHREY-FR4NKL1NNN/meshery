@@ -19,15 +19,17 @@ function fetchQuery(operation, variables) {
 export let subscriptionClient;
 
 if (typeof window !== "undefined"){
-  subscriptionClient = new SubscriptionClient("ws://"+window.location.host+"/api/system/graphql/query", {
+  const isWss = window.location.protocol === "https:"; // https only accepts secure websockets
+  const wsProtocol = isWss ? "wss://" : "ws://"
+  subscriptionClient = new SubscriptionClient(wsProtocol + window.location.host + "/api/system/graphql/query", {
     reconnect : true,
+    minTimeout: 4000
   });
 
 }
 
 function setupSubscription(config, variables, cacheConfig, observer) {
   const query = config.text;
-
 
   const subscribeObservable = subscriptionClient.request({ query, variables }, (error, result) => {
     if (error) {

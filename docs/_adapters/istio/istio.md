@@ -4,14 +4,30 @@ title: Meshery Adapter for Istio
 name: Meshery Adapter for Istio
 mesh_name: Istio
 earliest_version: v1.6.0
-port: 10000/tcp
+port: 10000/gRPC
 project_status: stable
-adapter_version: v0.5.4
 lab: istio-meshery-adapter
 github_link: https://github.com/meshery/meshery-istio
 image: /assets/img/service-meshes/istio.svg
 permalink: service-meshes/adapters/istio
 ---
+
+{% assign sorted_tests_group = site.compatibility | group_by: "meshery-component" %}
+{% for group in sorted_tests_group %}
+      {% if group.name == "meshery-istio" %}
+        {% assign items = group.items | sort: "meshery-component-version" | reverse %}
+        {% for item in items %}
+          {% if item.meshery-component-version != "edge" %}
+            {% if item.overall-status == "passing" %}
+              {% assign adapter_version_dynamic = item.meshery-component-version %}
+              {% break %}
+            {% elsif item.overall-status == "failing" %}
+              {% continue %}
+            {% endif %}
+          {% endif %}
+        {% endfor %} 
+      {% endif %}
+{% endfor %}
 
 {% include adapter-status.html %}
 
@@ -30,7 +46,7 @@ permalink: service-meshes/adapters/istio
 
 ### Lifecycle management
 
-The {{page.name}} can install {{page.version}} of the {{page.title}} service mesh. The SMI adapter for Istio can also be installed using Meshery.
+The {{page.name}} can install **{{page.earliest_version}}** of the {{page.mesh_name}} service mesh. The SMI adapter for Istio can also be installed using Meshery.
 
 ### Install {{ page.mesh_name }}
 
@@ -40,7 +56,7 @@ In Meshery's UI, choose the Meshery Adapter for {{ page.mesh_name }}.
   <img style="width:500px;" src="{{ site.baseurl }}/assets/img/adapters/istio/istio-adapter.png" />
 </a>
 
-Click on (+) and choose the {{page.version}} of the {{page.mesh_name}} service mesh.
+Click on (+) and choose the {{page.earliest_version}} of the {{page.mesh_name}} service mesh.
 
 <a href="{{ site.baseurl }}/assets/img/adapters/istio/istio-install.png">
   <img style="width:500px;" src="{{ site.baseurl }}/assets/img/adapters/istio/istio-install.png" />
@@ -61,7 +77,7 @@ The ({{page.name}}) includes a handful of sample applications. Use Meshery to de
 
 ## Using Service Mesh Standards
 
-As the service mesh management plane, Meshery enables the adoption, operation, and management of any service mesh and their workloads. Meshery's powerful performance management functionality is accomplished through implementation of [Service Mesh Performance](https://smp-spec.io) (SMP). Meshery's multi-mesh management functionality leverages [Service Mesh Interface](https://smi-spec.io) (SMI) and Meshery is the conformance tool for SMI. Meshery integrates with Open Application Model (OAM) to enable users to deploy service mesh patterns. Meshery enables operators to deploy WebAssembly filters to Envoy-based data planes. Meshery facilitates learning about functionality and performance of service meshes and incorporates the collection and display of metrics from applications running on or across service meshes.
+As the open source, cloud native management plane, Meshery enables the adoption, operation, and management of Kubernetes, any service mesh, and their workloads. Meshery's powerful performance management functionality is accomplished through implementation of [Service Mesh Performance](https://smp-spec.io) (SMP). Meshery's cloud native manager functionality leverages [Service Mesh Interface](https://smi-spec.io) (SMI) and Meshery is the conformance tool for SMI. Meshery integrates with Open Application Model (OAM) to enable users to deploy service mesh patterns. Meshery enables operators to deploy WebAssembly filters to Envoy-based data planes. Meshery facilitates learning about functionality and performance of service meshes and incorporates the collection and display of metrics from applications using Prometheus and Grafana integrations.
 
 ### Service Mesh Patterns and Open Application Model (OAM)
 
@@ -89,7 +105,7 @@ On demand, the {{page.name}} will parse all of Istio's configuration and compare
 
 ### Custom service mesh configuration
 
-Meshery allows you to apply configuration to your service mesh deployment. You can paste (or type in) any Kubernetes manifest that you would like to have applied to your service mesh, in fact, you can apply any configuration that you you would like to your Kubernetes cluster. This configuration may be VirtualServices, DestinationRules or any other custom Istio resource.
+Meshery allows you to apply configuration to your service mesh deployment. You can paste (or type in) any Kubernetes manifest that you would like to have applied to your service mesh, in fact, you can apply any configuration that you would like to your Kubernetes cluster. This configuration may be VirtualServices, DestinationRules or any other custom Istio resource.
 
 <a href="{{ site.baseurl }}istio-adapter-custom-configuration.png">
   <img style="width:500px;" src="{{ site.baseurl }}/assets/img/adapters/istio/istio-adapter-custom-configuration.png" />

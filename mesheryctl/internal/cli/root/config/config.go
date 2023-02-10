@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -23,25 +24,26 @@ type Version struct {
 
 // MesheryCtlConfig is configuration structure of mesheryctl with contexts
 type MesheryCtlConfig struct {
-	Contexts       map[string]Context `mapstructure:"contexts"`
-	CurrentContext string             `mapstructure:"current-context"`
-	Tokens         []Token            `mapstructure:"tokens"`
+	Contexts       map[string]Context `yaml:"contexts" mapstructure:"contexts"`
+	CurrentContext string             `yaml:"current-context" mapstructure:"current-context"`
+	Tokens         []Token            `yaml:"tokens" mapstructure:"tokens"`
 }
 
 // Token defines the structure of Token stored in mesheryctl
 type Token struct {
-	Name     string `mapstructure:"name"`
-	Location string `mapstructure:"location"`
+	Name     string `yaml:"name" mapstructure:"name"`
+	Location string `yaml:"location" mapstructure:"location"`
 }
 
 // Context defines a meshery environment
 type Context struct {
-	Endpoint string   `mapstructure:"endpoint,omitempty"`
-	Token    string   `mapstructure:"token,omitempty"`
-	Platform string   `mapstructure:"platform"`
-	Adapters []string `mapstructure:"adapters,omitempty"`
-	Channel  string   `mapstructure:"channel,omitempty"`
-	Version  string   `mapstructure:"version,omitempty"`
+	Endpoint   string   `yaml:"endpoint,omitempty" mapstructure:"endpoint,omitempty"`
+	Token      string   `yaml:"token,omitempty" mapstructure:"token,omitempty"`
+	Platform   string   `yaml:"platform" mapstructure:"platform"`
+	Components []string `yaml:"components,omitempty" mapstructure:"components,omitempty"`
+	Channel    string   `yaml:"channel,omitempty" mapstructure:"channel,omitempty"`
+	Version    string   `yaml:"version,omitempty" mapstructure:"version,omitempty"`
+	Provider   string   `yaml:"provider,omitempty" mapstructure:"provider,omitempty"`
 }
 
 // GetMesheryCtl returns a reference to the mesheryctl configuration object
@@ -55,8 +57,8 @@ func GetMesheryCtl(v *viper.Viper) (*MesheryCtlConfig, error) {
 	return c, err
 }
 
-// SetMesheryCtl sets the mesheryctl configuration object
-func SetContext(v *viper.Viper, context *Context, name string) error {
+// UpdateContextInConfig write the given context in meshconfig
+func UpdateContextInConfig(v *viper.Viper, context *Context, name string) error {
 	viper.Set("contexts."+name, context)
 	err := viper.WriteConfig()
 	if err != nil {
@@ -69,7 +71,7 @@ func SetContext(v *viper.Viper, context *Context, name string) error {
 // CheckIfCurrentContextIsValid checks if current context is valid
 func (mc *MesheryCtlConfig) CheckIfCurrentContextIsValid() (*Context, error) {
 	if mc.CurrentContext == "" {
-		return &Context{}, errors.New("current context not set")
+		return &Context{}, errors.New("Valid context is not available in meshconfig")
 	}
 
 	ctx, exists := mc.Contexts[mc.CurrentContext]
@@ -187,9 +189,9 @@ func (ctx *Context) SetPlatform(platform string) {
 	ctx.Platform = platform
 }
 
-// GetAdapters returns the adapters in the current context
-func (ctx *Context) GetAdapters() []string {
-	return ctx.Adapters
+// GetComponents returns the components in the current context
+func (ctx *Context) GetComponents() []string {
+	return ctx.Components
 }
 
 // GetChannel returns the channel of the current context
@@ -241,7 +243,7 @@ func (ctx *Context) ValidateVersion() error {
 	}()
 
 	if resp.StatusCode == 404 {
-		log.Fatal("version " + ctx.Version + " is not a valid Meshery release")
+		log.Fatal("version '" + ctx.Version + "' is not a valid Meshery release.")
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -255,6 +257,16 @@ func (ctx *Context) ValidateVersion() error {
 	return nil
 }
 
+// GetProvider returns the provider of the current context
+func (ctx *Context) GetProvider() string {
+	return ctx.Provider
+}
+
+// SetProvider sets the provider of the current context
+func (ctx *Context) SetProvider(provider string) {
+	ctx.Provider = provider
+}
+
 // GetName returns the token name
 func (t *Token) GetName() string {
 	return t.Name
@@ -266,7 +278,16 @@ func (t *Token) GetLocation() string {
 		return t.Location
 	}
 
-	// If file path is not absolute then assume that the file
+	// If file path is relative, then it has to be expanded
+	if strings.HasPrefix(t.Location, "~/") {
+		usr, err := os.UserHomeDir()
+		if err != nil {
+			log.Warn("failed to get user home directory")
+		}
+		return filepath.Join(usr, t.Location[2:])
+	}
+
+	// If file path is not absolute, then assume that the file
 	// is in the .meshery directory
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -395,15 +416,16 @@ func SetTokenToConfig(tokenName string, configPath string, ctxName string) error
 		return err
 	}
 	context.Token = tokenName
-	err = SetContext(viper.GetViper(), context, ctxName)
+	err = UpdateContextInConfig(viper.GetViper(), context, ctxName)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// AddContextToConfig adds context passed to it to mesheryctl config file
-func AddContextToConfig(contextName string, context Context, configPath string, set bool) error {
+// AddContextToConfig adds context passed to it to mesheryctl config file. If overwrite is set to true, existing
+// context with the contextName is overwritten
+func AddContextToConfig(contextName string, context Context, configPath string, set bool, overwrite bool) error {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return err
 	}
@@ -424,7 +446,7 @@ func AddContextToConfig(contextName string, context Context, configPath string, 
 	}
 
 	_, exists := mctlCfg.Contexts[contextName]
-	if exists {
+	if exists && !overwrite {
 		return errors.New("error adding context: a context with same name already exists")
 	}
 

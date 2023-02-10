@@ -11,40 +11,52 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/asaskevich/govalidator"
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
-	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
-	"github.com/layer5io/meshery/models"
+	"github.com/layer5io/meshery/server/models"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	skipSave bool // skip saving a app
-	appFile  string
+	skipSave   bool   // skip saving the app
+	appFile    string // app file
+	sourceType string // app file type (manifest / compose)
 )
 
 var onboardCmd = &cobra.Command{
 	Use:   "onboard",
 	Short: "Onboard application",
-	Long:  `Command will trigger deploy of Application file`,
-	Args:  cobra.MinimumNArgs(0),
+	Long:  `Command will trigger deploy of application`,
 	Example: `
-	Onboard application by providing file path
-	mesheryctl app onboard -f <filepath>
+// Onboard application by providing file path
+mesheryctl app onboard -f [filepath] -s [source type]
+
+Example:
+mesheryctl app onboard -f ./application.yml -s "Kubernetes Manifest"
+
+! Refer below image link for usage
+* Usage of mesheryctl app onboard
+# ![app-onboard-usage](/assets/img/mesheryctl/app-onboard.png)
 	`,
+	Args: func(_ *cobra.Command, args []string) error {
+		const errMsg = `Usage: mesheryctl app onboard -f [filepath] -s [source type]
+Example: mesheryctl app onboard -f ./application.yml -s "Kubernetes Manifest"
+Description: Onboard application`
+
+		if file == "" && len(args) == 0 {
+			return fmt.Errorf("file path or application name not provided. Provide file/app name \n\n%v", errMsg)
+		}
+		return nil
+	},
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return getSourceTypes()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var req *http.Request
 		var err error
 		client := &http.Client{}
-
-		// set default tokenpath for app onboard command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-		}
 
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
@@ -60,16 +72,11 @@ var onboardCmd = &cobra.Command{
 			appName := strings.Join(args, "%20")
 
 			// search and fetch apps with app-name
-			log.Debug("Fetching apps")
+			utils.Log.Debug("Fetching apps")
 
-			req, err = http.NewRequest("GET", appURL+"?search="+appName, nil)
+			req, err = utils.NewRequest("GET", appURL+"?search="+appName, nil)
 			if err != nil {
 				return err
-			}
-
-			err = utils.AddAuthDetails(req, tokenPath)
-			if err != nil {
-				return errors.New("authentication token not found. please supply a valid user token with the --token (or -t) flag")
 			}
 
 			resp, err := client.Do(req)
@@ -85,11 +92,13 @@ var onboardCmd = &cobra.Command{
 			defer resp.Body.Close()
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return errors.Wrap(err, utils.PerfError("failed to read response body"))
+				utils.Log.Debug("failed to read response body")
+				return errors.Wrap(err, "couldn't read response from server. Please try again after some time")
 			}
 			err = json.Unmarshal(body, &response)
 			if err != nil {
-				return errors.Wrap(err, "failed to unmarshal response body")
+				utils.Log.Debug("failed to unmarshal JSON response body")
+				return errors.Wrap(err, "couldn't process response received from server")
 			}
 
 			index := 0
@@ -103,135 +112,19 @@ var onboardCmd = &cobra.Command{
 				appFile = response.Applications[index].ApplicationFile
 			}
 		} else {
-			// Method to check if the entered file is a URL or not
-			if validURL := govalidator.IsURL(file); !validURL {
-				content, err := os.ReadFile(file)
-				if err != nil {
-					return err
-				}
-				text := string(content)
-
-				// if --skip-save is not passed we save the apps first
-				if !skipSave {
-					jsonValues, err := json.Marshal(map[string]interface{}{
-						"application_data": map[string]interface{}{
-							"application_file": text,
-						},
-						"save": true,
-					})
-					if err != nil {
-						return err
-					}
-					req, err = http.NewRequest("POST", appURL, bytes.NewBuffer(jsonValues))
-					if err != nil {
-						return err
-					}
-					err = utils.AddAuthDetails(req, tokenPath)
-					if err != nil {
-						return err
-					}
-					resp, err := client.Do(req)
-					if err != nil {
-						return err
-					}
-					log.Debug("saved app file")
-					var response []*models.MesheryApplication
-					// failsafe (bad api call)
-					if resp.StatusCode != 200 {
-						return errors.Errorf("Response Status Code %d, possible Server Error", resp.StatusCode)
-					}
-					defer resp.Body.Close()
-
-					body, err := io.ReadAll(resp.Body)
-					if err != nil {
-						return errors.Wrap(err, utils.PerfError("failed to read response body"))
-					}
-					err = json.Unmarshal(body, &response)
-					if err != nil {
-						return errors.Wrap(err, "failed to unmarshal response body")
-					}
-				}
-
-				// setup app file
-				appFile = text
-			} else {
-				var jsonValues []byte
-				url, path, err := utils.ParseURLGithub(file)
-				if err != nil {
-					return err
-				}
-
-				log.Debug(url)
-				log.Debug(path)
-
-				// save the app with Github URL
-				if !skipSave {
-					if path != "" {
-						jsonValues, _ = json.Marshal(map[string]interface{}{
-							"url":  url,
-							"path": path,
-							"save": true,
-						})
-					} else {
-						jsonValues, _ = json.Marshal(map[string]interface{}{
-							"url":  url,
-							"save": true,
-						})
-					}
-				} else { // we don't save the app
-					if path != "" {
-						jsonValues, _ = json.Marshal(map[string]interface{}{
-							"url":  url,
-							"path": path,
-							"save": false,
-						})
-					} else {
-						jsonValues, _ = json.Marshal(map[string]interface{}{
-							"url":  url,
-							"save": false,
-						})
-					}
-				}
-				req, err = http.NewRequest("POST", appURL, bytes.NewBuffer(jsonValues))
-				if err != nil {
-					return err
-				}
-				err = utils.AddAuthDetails(req, tokenPath)
-				if err != nil {
-					return err
-				}
-				resp, err := client.Do(req)
-				if err != nil {
-					return err
-				}
-				log.Debug("remote hosted app request success")
-				var response []*models.MesheryApplication
-				// failsafe (bad api call)
-				if resp.StatusCode != 200 {
-					return errors.Errorf("Response Status Code %d, possible Server Error", resp.StatusCode)
-				}
-				defer resp.Body.Close()
-
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					return errors.Wrap(err, utils.PerfError("failed to read response body"))
-				}
-				err = json.Unmarshal(body, &response)
-				if err != nil {
-					return errors.Wrap(err, "failed to unmarshal response body")
-				}
-
-				// setup app file here
-				appFile = response[0].ApplicationFile
+			// Check if a valid source type is set
+			if !isValidSource(sourceType) {
+				return errors.Errorf("application source type (-s) invalid or not passed.\nAllowed source types: %s", strings.Join(validSourceTypes, ", "))
 			}
+			app, err := importApp(sourceType, file, appURL, !skipSave)
+			if err != nil {
+				return err
+			}
+
+			appFile = app.ApplicationFile
 		}
 
-		req, err = http.NewRequest("POST", deployURL, bytes.NewBuffer([]byte(appFile)))
-		if err != nil {
-			return err
-		}
-
-		err = utils.AddAuthDetails(req, tokenPath)
+		req, err = utils.NewRequest("POST", deployURL, bytes.NewBuffer([]byte(appFile)))
 		if err != nil {
 			return err
 		}
@@ -248,9 +141,9 @@ var onboardCmd = &cobra.Command{
 		}
 
 		if res.StatusCode == 200 {
-			log.Info("app successfully onboarded")
+			utils.Log.Info("app successfully onboarded")
 		}
-		log.Info(string(body))
+		utils.Log.Info(string(body))
 		return nil
 	},
 }
@@ -271,15 +164,15 @@ func multipleApplicationsConfirmation(profiles []models.MesheryApplication) int 
 		fmt.Printf("Enter the index of app: ")
 		response, err := reader.ReadString('\n')
 		if err != nil {
-			log.Fatal(err)
+			utils.Log.Info(err)
 		}
 		response = strings.ToLower(strings.TrimSpace(response))
 		index, err := strconv.Atoi(response)
 		if err != nil {
-			log.Info(err)
+			utils.Log.Info(err)
 		}
 		if index < 0 || index >= len(profiles) {
-			log.Info("Invalid index")
+			utils.Log.Info("Invalid index")
 		} else {
 			return index
 		}
@@ -289,4 +182,5 @@ func multipleApplicationsConfirmation(profiles []models.MesheryApplication) int 
 func init() {
 	onboardCmd.Flags().StringVarP(&file, "file", "f", "", "Path to app file")
 	onboardCmd.Flags().BoolVarP(&skipSave, "skip-save", "", false, "Skip saving a app")
+	onboardCmd.Flags().StringVarP(&sourceType, "source-type", "s", "", "Type of source file (ex. manifest / compose / helm)")
 }

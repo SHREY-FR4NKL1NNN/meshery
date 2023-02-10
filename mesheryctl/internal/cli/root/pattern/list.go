@@ -9,9 +9,8 @@ import (
 	"strings"
 
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
-	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
-	"github.com/layer5io/meshery/models"
+	"github.com/layer5io/meshery/server/models"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -26,28 +25,30 @@ var listCmd = &cobra.Command{
 	Short: "List patterns",
 	Long:  `Display list of all available pattern files.`,
 	Args:  cobra.MinimumNArgs(0),
+	Example: `
+// list all available patterns
+mesheryctl pattern list
+
+! Refer below image link for usage
+* Usage of mesheryctl pattern list
+# ![pattern-list-usage](/assets/img/mesheryctl/patternList.png)
+	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
 			return errors.Wrap(err, "error processing config")
 		}
-		// set default tokenpath for perf apply command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-		}
+
 		var response models.PatternsAPIResponse
 		client := &http.Client{}
-		req, err := http.NewRequest("GET", mctlCfg.GetBaseMesheryURL()+"/api/pattern", nil)
+		req, err := utils.NewRequest("GET", mctlCfg.GetBaseMesheryURL()+"/api/pattern", nil)
 		if err != nil {
 			return err
 		}
-		err = utils.AddAuthDetails(req, tokenPath)
-		if err != nil {
-			return err
-		}
+
 		res, err := client.Do(req)
 		if err != nil {
-			return err
+			return errors.Errorf("Unable to reach Meshery server at %s. Verify your environment's readiness for a Meshery deployment by running `mesheryctl system check`. ", mctlCfg.GetBaseMesheryURL())
 		}
 		defer res.Body.Close()
 		body, err := io.ReadAll(res.Body)
@@ -59,7 +60,7 @@ var listCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		tokenObj, err := utils.ReadToken(tokenPath)
+		tokenObj, err := utils.ReadToken(utils.TokenFlag)
 		if err != nil {
 			return err
 		}

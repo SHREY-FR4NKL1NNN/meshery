@@ -9,9 +9,8 @@ import (
 	"strings"
 
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
-	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants"
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
-	"github.com/layer5io/meshery/models"
+	"github.com/layer5io/meshery/server/models"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -25,27 +24,23 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List filters",
 	Long:  `Display list of all available filter files.`,
-	Args:  cobra.MinimumNArgs(0),
+	Example: `
+// List all WASM filter files present
+mesheryctl exp filter list	
+	`,
+	Args: cobra.MaximumNArgs(0),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
 			return errors.Wrap(err, "error processing config")
 		}
-		// set default tokenpath for perf apply command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-		}
-
 		var response models.FiltersAPIResponse
 		client := &http.Client{}
-		req, err := http.NewRequest("GET", mctlCfg.GetBaseMesheryURL()+"/api/filter", nil)
+		req, err := utils.NewRequest("GET", mctlCfg.GetBaseMesheryURL()+"/api/filter", nil)
 		if err != nil {
 			return err
 		}
-		err = utils.AddAuthDetails(req, tokenPath)
-		if err != nil {
-			return err
-		}
+
 		res, err := client.Do(req)
 		if err != nil {
 			return err
@@ -61,11 +56,11 @@ var listCmd = &cobra.Command{
 		err = json.Unmarshal(body, &response)
 
 		if err != nil {
-			return err
+			return ErrUnmarshal(err)
 		}
-		tokenObj, err := utils.ReadToken(tokenPath)
+		tokenObj, err := utils.ReadToken(utils.TokenFlag)
 		if err != nil {
-			return err
+			return errors.New("Error reading token. Use 'mesheryctl exp filter list --help' for usage details. " + err.Error())
 		}
 		provider := tokenObj["meshery-provider"]
 		var data [][]string
@@ -100,7 +95,7 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 
-		// Check if messhery provider is set
+		// Check if meshery provider is set
 		if provider == "None" {
 			for _, v := range response.Filters {
 				FilterName := strings.Trim(v.Name, filepath.Ext(v.Name))

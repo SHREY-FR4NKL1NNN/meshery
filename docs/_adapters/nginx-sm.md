@@ -4,12 +4,29 @@ title: Meshery Adapter for NGINX Service Mesh
 name: Meshery Adapter for NGINX Service Mesh
 mesh_name: NGINX Service Mesh
 earliest_version: v1.2.0
-port: 10010/tcp
-project_status: beta
+port: 10010/gRPC
+project_status: stable
 github_link: https://github.com/meshery/meshery-nginx-sm
 image: /assets/img/service-meshes/nginx-sm.svg
 permalink: service-meshes/adapters/nginx-sm
 ---
+
+{% assign sorted_tests_group = site.compatibility | group_by: "meshery-component" %}
+{% for group in sorted_tests_group %}
+      {% if group.name == "meshery-nginx-sm" %}
+        {% assign items = group.items | sort: "meshery-component-version" | reverse %}
+        {% for item in items %}
+          {% if item.meshery-component-version != "edge" %}
+            {% if item.overall-status == "passing" %}
+              {% assign adapter_version_dynamic = item.meshery-component-version %}
+              {% break %}
+            {% elsif item.overall-status == "failing" %}
+              {% continue %}
+            {% endif %}
+          {% endif %}
+        {% endfor %} 
+      {% endif %}
+{% endfor %}
 
 {% include adapter-status.html %}
 
@@ -17,7 +34,7 @@ The {{ page.name }} is currently under construction ({{ page.project_status }} s
 
 ## Lifecycle management
 
-The {{page.name}} can install **{{page.version}}** of {{page.mesh_name}}. A number of sample applications can be installed using the {{page.name}}.
+The {{page.name}} can install **{{page.earliest_version}}** of {{page.mesh_name}} service mesh. A number of sample applications can be installed using the {{page.name}}.
 
 ### Features
 
@@ -41,7 +58,7 @@ The {{ page.name }} includes a handful of sample applications. Use Meshery to de
 
   - Httpbin is a simple HTTP request and response service.
 
-- [NGINX Servce Mesh Books](https://github.com/BuoyantIO/booksapp)
+- [NGINX Service Mesh Books](https://github.com/BuoyantIO/booksapp)
   - Application that helps you manage your bookshelf.
 
 Identify overhead involved in running {{page.mesh_name}}, various {{page.mesh_name}} configurations while running different workloads and on different infrastructure. The adapter facilitates data plane and control plane performance testing.
@@ -50,3 +67,4 @@ Identify overhead involved in running {{page.mesh_name}}, various {{page.mesh_na
 1. Grafana integration
 
 The [{{page.name}}]({{ page.github_link }}) will connect to NGINX Service Mesh's Prometheus and Grafana instances running in the control plane.
+

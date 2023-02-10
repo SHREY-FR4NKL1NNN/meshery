@@ -1,55 +1,39 @@
-import React, { useState, useEffect, useRef } from "react";
-import { withStyles, makeStyles, MuiThemeProvider } from "@material-ui/core/styles";
-import { createTheme } from '@material-ui/core/styles';
 import {
-  NoSsr,
-  TableCell,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Divider,
-  Tooltip,
-  Grid,
-  Typography,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  CardContent,
-  Card,
-  CardActions,
-  AppBar,
-  Toolbar
+  Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, NoSsr,
+  TableCell, Tooltip, Typography, Button
 } from "@material-ui/core";
-import { UnControlled as CodeMirror } from "react-codemirror2";
-import DeleteIcon from "@material-ui/icons/Delete";
-import SaveIcon from '@material-ui/icons/Save';
-import UploadIcon from "@material-ui/icons/Publish";
-import { connect } from "react-redux";
-import { bindActionCreators } from "redux";
-import MUIDataTable from "mui-datatables";
-import PromptComponent from "./PromptComponent";
-import Moment from "react-moment";
-import { withSnackbar } from "notistack";
-import CloseIcon from "@material-ui/icons/Close";
-import PlayArrowIcon from '@material-ui/icons/PlayArrow';
-import { updateProgress } from "../lib/store";
+import { makeStyles, withStyles } from "@material-ui/core/styles";
 import TableSortLabel from "@material-ui/core/TableSortLabel";
-import URLUploader from "./URLUploader";
-import dataFetch, { promisifiedDataFetch } from "../lib/data-fetch";
-import { CircularProgress } from "@material-ui/core";
-import PatternServiceForm from "./MesheryMeshInterface/PatternServiceForm";
+import CloseIcon from "@material-ui/icons/Close";
+import DeleteIcon from "@material-ui/icons/Delete";
 import FullscreenIcon from '@material-ui/icons/Fullscreen';
 import FullscreenExitIcon from '@material-ui/icons/FullscreenExit';
-import ExpandMoreIcon from "@material-ui/icons/ExpandMore";
-import { Button } from "@material-ui/core";
-import jsYaml from "js-yaml";
-import PascalCaseToKebab from "../utils/PascalCaseToKebab";
-import ArrowBackIcon from '@material-ui/icons/ArrowBack';
-import AppsIcon from "./ConnectionWizard/icons/apps";
-import FILE_OPS from "../utils/configurationFileHandlersEnum"
+import SaveIcon from '@material-ui/icons/Save';
+import MUIDataTable from "mui-datatables";
+import { withSnackbar } from "notistack";
+import React, { useEffect, useRef, useState } from "react";
+import { UnControlled as CodeMirror } from "react-codemirror2";
+import Moment from "react-moment";
+import { connect } from "react-redux";
+import { bindActionCreators } from "redux";
+import dataFetch from "../lib/data-fetch";
+import { updateProgress } from "../lib/store";
+import { FILE_OPS } from "../utils/Enum";
+import { ctxUrl } from "../utils/multi-ctx";
+import { getComponentsinFile, randomPatternNameGenerator as getRandomName } from "../utils/utils";
+import PromptComponent from "./PromptComponent";
+import UploadImport from "./UploadImport";
+import UndeployIcon from "../public/static/img/UndeployIcon";
+import DoneAllIcon from '@material-ui/icons/DoneAll';
+import ConfirmationMsg from "./ConfirmationModal";
+import ViewSwitch from "./ViewSwitch";
+import ApplicationsGrid from "./MesheryApplications/ApplicationsGrid";
+import { fileDownloader } from "../utils/fileDownloader";
 import { trueRandom } from "../lib/trueRandom";
+import PublishIcon from "@material-ui/icons/Publish";
+import InfoIcon from '@material-ui/icons/Info';
+import ConfigurationSubscription from "./graphql/subscriptions/ConfigurationSubscription";
+import { iconMedium, iconSmall } from "../css/icons.styles";
 
 const styles = (theme) => ({
   grid : { padding : theme.spacing(2), },
@@ -61,7 +45,27 @@ const styles = (theme) => ({
     '& .MuiTableRow-root' : {
       cursor : 'pointer'
     }
-  }
+  },
+  createButton : {
+    display : "flex",
+    justifyContent : "flex-start",
+    alignItems : "center",
+    whiteSpace : "nowrap",
+  },
+  topToolbar : {
+    margin : "2rem auto",
+    display : "flex",
+    justifyContent : "space-between",
+    paddingLeft : "1rem"
+  },
+  viewSwitchButton : {
+    justifySelf : "flex-end",
+    marginLeft : "auto",
+    paddingLeft : "1rem"
+  },
+  // text : {
+  //   padding : theme.spacing(1)
+  // }
 });
 
 
@@ -95,25 +99,6 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 
-function CustomToolbar(onClick, urlOnClick) {
-  return function Toolbar() {
-    return (
-      <>
-        <label htmlFor="upload-button">
-          <input type="file" accept=".yaml, .yml" hidden onChange={onClick} id="upload-button" name="upload-button" />
-          <Tooltip title="Upload Application">
-            <IconButton aria-label="Upload" component="span">
-              <UploadIcon />
-            </IconButton>
-          </Tooltip>
-        </label>
-        <label htmlFor="url-upload-button">
-          <URLUploader onSubmit={urlOnClick} />
-        </label>
-      </>
-    );
-  };
-}
 function TooltipIcon({ children, onClick, title }) {
   return (
     <Tooltip title={title} placement="top" arrow interactive >
@@ -142,10 +127,10 @@ function YAMLEditor({ application, onClose, onSubmit }) {
         <TooltipIcon
           title={fullScreen ? "Exit Fullscreen" : "Enter Fullscreen"}
           onClick={toggleFullScreen}>
-          {fullScreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+          {fullScreen ? <FullscreenExitIcon style={iconMedium}  /> : <FullscreenIcon style={iconMedium}  />}
         </TooltipIcon>
         <TooltipIcon title="Exit" onClick={onClose}>
-          <CloseIcon />
+          <CloseIcon style={iconMedium} />
         </TooltipIcon>
       </DialogTitle>
       <Divider variant="fullWidth" light />
@@ -170,18 +155,25 @@ function YAMLEditor({ application, onClose, onSubmit }) {
           <IconButton
             aria-label="Update"
             color="primary"
-            onClick={() => onSubmit(yaml, application.id, application.name, FILE_OPS.UPDATE)}
+            onClick={() => onSubmit({
+              data : yaml, id : application.id, name : application.name, type : FILE_OPS.UPDATE, source_type : application.type.String
+            })}
           >
-            <SaveIcon />
+            <SaveIcon style={iconMedium}  />
           </IconButton>
         </Tooltip>
         <Tooltip title="Delete Application">
           <IconButton
             aria-label="Delete"
             color="primary"
-            onClick={() => onSubmit(yaml, application.id, application.name, FILE_OPS.DELETE)}
+            onClick={() => onSubmit({
+              data : yaml,
+              id : application.id,
+              name : application.name,
+              type : FILE_OPS.DELETE
+            })}
           >
-            <DeleteIcon />
+            <DeleteIcon style={iconMedium} />
           </IconButton>
         </Tooltip>
       </DialogActions>
@@ -189,8 +181,47 @@ function YAMLEditor({ application, onClose, onSubmit }) {
   );
 }
 
+const ACTION_TYPES = {
+  FETCH_APPLICATIONS : {
+    name : "FETCH_APPLICATION",
+    error_msg : "Failed to fetch application"
+  },
+  FETCH_APPLICATIONS_TYPES : {
+    name : "FETCH_APPLICATION_TYPES",
+    error_msg : "Failed to fetch application types"
+  },
+  UPDATE_APPLICATIONS : {
+    name : "UPDATEAPPLICATION",
+    error_msg : "Failed to update application file"
+  },
+  DELETE_APPLICATIONS : {
+    name : "DELETEAPPLICATION",
+    error_msg : "Failed to delete application file"
+  },
+  DEPLOY_APPLICATIONS : {
+    name : "DEPLOY_APPLICATION",
+    error_msg : "Failed to deploy application file"
+  },
+  UNDEPLOY_APPLICATION : {
+    name : "UNDEPLOY_APPLICATION",
+    error_msg : "Failed to undeploy application file"
+  },
+  UPLOAD_APPLICATION : {
+    name : "UPLOAD_APPLICATION",
+    error_msg : "Failed to upload application file"
+  },
+  DOWNLOAD_APP : {
+    name : "DOWNLOAD_APP",
+    error_msg : "Failed to download application file"
+  }
+};
+
+function resetSelectedApplication() {
+  return { show : false, application : null };
+}
+
 function MesheryApplications({
-  updateProgress, enqueueSnackbar, closeSnackbar, user, classes
+  updateProgress, enqueueSnackbar, closeSnackbar, user, classes, selectedK8sContexts
 }) {
   const [page, setPage] = useState(0);
   const [search] = useState("");
@@ -198,114 +229,196 @@ function MesheryApplications({
   const [count, setCount] = useState(0);
   const modalRef = useRef(null);
   const [pageSize, setPageSize] = useState(10);
-  const [showForm, setShowForm] = useState(false);
   const [applications, setApplications] = useState([]);
   const [selectedRowData, setSelectedRowData] = useState(null);
-  const DEPLOY_URL = '/api/application/deploy';
-
-  const getMuiTheme = () => createTheme({
-    overrides : {
-      MuiInput : {
-        underline : {
-          "&:hover:not(.Mui-disabled):before" : {
-            borderBottom : "2px solid #222"
-          },
-          "&:after" : {
-            borderBottom : "2px solid #222"
-          }
-        }
-      },
-      MUIDataTableSearch : {
-        searchIcon : {
-          color : "#607d8b",
-          marginTop : "7px",
-          marginRight : "8px",
-        },
-        clearIcon : {
-          "&:hover" : {
-            color : "#607d8b"
-          }
-        },
-      },
-      MUIDataTableSelectCell : {
-        checkboxRoot : {
-          '&$checked' : {
-            color : '#607d8b',
-          },
-        },
-      },
-      MUIDataTableToolbar : {
-        iconActive : {
-          color : "#222"
-        },
-        icon : {
-          "&:hover" : {
-            color : "#607d8b"
-          }
-        },
-      }
-    }
+  const [selectedApplication, setSelectedApplication] = useState(resetSelectedApplication());
+  const DEPLOY_URL = '/api/pattern/deploy';
+  const [types, setTypes] = useState([]);
+  const [modalOpen, setModalOpen] = useState({
+    open : false,
+    deploy : false,
+    application_file : null,
+    name : "",
+    count : 0
   });
 
-  const ACTION_TYPES = {
-    FETCH_APPLICATIONS : {
-      name : "FETCH_APPLICATION",
-      error_msg : "Failed to fetch application"
-    },
-    UPDATE_APPLICATIONS : {
-      name : "UPDATEAPPLICATION",
-      error_msg : "Failed to update application file"
-    },
-    DELETE_APPLICATIONS : {
-      name : "DELETEAPPLICATION",
-      error_msg : "Failed to delete application file"
-    },
-    DEPLOY_APPLICATIONS : {
-      name : "DEPLOY_APPLICATION",
-      error_msg : "Failed to deploy application file"
-    },
-    UPLOAD_APPLICATION : {
-      name : "UPLOAD_APPLICATION",
-      error_msg : "Failed to upload application file"
-    },
-  };
+  const [importModal, setImportModal] = useState({
+    open : false
+  })
 
-
+  const [viewType, setViewType] = useState(
+    /**  @type {TypeView} */
+    ("grid")
+  );
+  const disposeConfSubscriptionRef = useRef(null);
   const searchTimeout = useRef(null);
 
   /**
    * fetch applications when the page loads
    */
   useEffect(() => {
-    fetchApplications(page, pageSize, search, sortOrder);
-  }, []);
+    fetchApplications(page, pageSize, search, sortOrder)
+  }, [page, pageSize, search, sortOrder]);
 
   /**
-   * fetchApplications constructs the queries based on the parameters given
-   * and fetches the applications
-   * @param {number} page current page
-   * @param {number} pageSize items per page
-   * @param {string} search search string
-   * @param {string} sortOrder order of sort
+   * fetch applications when the application downloads
    */
+  useEffect(() => {
+    initAppsSubscription();
+    getTypes();
+    return () => {
+      disposeConfSubscriptionRef.current.dispose();
+    }
+  },[]);
 
-  const handleDeploy = (application_file) => {
+  const handleModalClose = () => {
+    setModalOpen({
+      open : false,
+      application_file : null,
+      name : "",
+      count : 0
+    });
+  }
+
+  const initAppsSubscription = (pageNo=page.toString(), pagesize=pageSize.toString(), searchText=search, order=sortOrder) => {
+    if (disposeConfSubscriptionRef.current) {
+      disposeConfSubscriptionRef.current.dispose();
+    }
+    const configurationSubscription = ConfigurationSubscription((result) => {
+      setPage(result.configuration?.applications.page || 0);
+      setPageSize(result.configuration?.applications.page_size || 0);
+      setCount(result.configuration?.applications.total_count || 0);
+      setApplications(result.configuration?.applications.applications)
+    },
+    {
+      applicationSelector : {
+        pageSize : pagesize,
+        page : pageNo,
+        search : searchText,
+        order : order
+      },
+      patternSelector : {
+        pageSize : pagesize,
+        page : pageNo,
+        search : searchText,
+        order : order
+      },
+      filterSelector : {
+        pageSize : pagesize,
+        page : pageNo,
+        search : searchText,
+        order : order
+      }
+    });
+    disposeConfSubscriptionRef.current = configurationSubscription
+  }
+
+  const handleModalOpen = (app_file, name, isDeploy) => {
+    setModalOpen({
+      open : true,
+      deploy : isDeploy,
+      application_file : app_file,
+      name : name,
+      count : getComponentsinFile(app_file)
+    });
+  }
+
+  const handleUploadImport = () => {
+    setImportModal({
+      open : true
+    });
+  }
+
+  const handleUploadImportClose = () => {
+    setImportModal({
+      open : false
+    });
+  }
+
+  const handleDeploy = (application_file, name) => {
+    updateProgress({ showProgress : true })
     dataFetch(
-      DEPLOY_URL,
+      ctxUrl(DEPLOY_URL, selectedK8sContexts),
       {
         credentials : "include",
         method : "POST",
         body : application_file,
       }, () => {
         console.log("ApplicationFile Deploy API", `/api/application/deploy`);
-        // },(e) => {
-        //   console.error(e)
-        // })
+        enqueueSnackbar(`"${name}" application deployed` , {
+          variant : "success",
+          action : function Action(key) {
+            return (
+              <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                <CloseIcon style={iconMedium} />
+              </IconButton>
+            );
+          },
+          autoHideDuration : 2000,
+        });
         updateProgress({ showProgress : false });
       },
       handleError(ACTION_TYPES.DEPLOY_APPLICATIONS)
     );
+  }
+
+  const handleUnDeploy = (application_file, name) => {
+    updateProgress({ showProgress : true })
+    dataFetch(
+      ctxUrl(DEPLOY_URL, selectedK8sContexts),
+      {
+        credentials : "include",
+        method : "DELETE",
+        body : application_file,
+      }, () => {
+        console.log("ApplicationFile Undeploy API", `/api/pattern/deploy`);
+        enqueueSnackbar(`"${name}" application undeployed`, {
+          variant : "success",
+          action : function Action(key) {
+            return (
+              <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                <CloseIcon style={iconMedium} />
+              </IconButton>
+            );
+          },
+          autoHideDuration : 2000,
+        });
+        updateProgress({ showProgress : false });
+      },
+      handleError(ACTION_TYPES.UNDEPLOY_APPLICATION)
+    );
+  }
+
+  const handleAppDownload = (id, source_type, name) => {
+    updateProgress({ showProgress : true })
+    dataFetch(
+        `/api/application/download/${id}/${source_type}`,
+        {
+          credentials : "include",
+          method : "GET",
+        },
+        () => {
+          fileDownloader(id, name, source_type);
+          console.log("ApplicationFile API", `/api/application/download/${id}/${source_type}`);
+          updateProgress({ showProgress : false });
+        },
+        handleError(ACTION_TYPES.DOWNLOAD_APP)
+    );
   };
+
+  const getTypes = () => {
+    dataFetch(
+      `/api/application/types`,
+      {
+        credentials : "include",
+        method : "GET",
+      },
+      (res) => {
+        setTypes(res)
+      },
+      handleError(ACTION_TYPES.FETCH_APPLICATIONS_TYPES)
+    );
+  }
 
   function fetchApplications(page, pageSize, search, sortOrder) {
     if (!search) search = "";
@@ -321,6 +434,7 @@ function MesheryApplications({
       `/api/application${query}`,
       { credentials : "include", },
       (result) => {
+        console.log(result);
         console.log("ApplicationFile API", `/api/application${query}`);
         updateProgress({ showProgress : false });
         if (result) {
@@ -328,8 +442,9 @@ function MesheryApplications({
           setPage(result.page || 0);
           setPageSize(result.page_size || 0);
           setCount(result.total_count || 0);
+          // setType()
         }
-      },
+      },// TODO map types
       // handleError
       handleError(ACTION_TYPES.FETCH_APPLICATIONS)
     );
@@ -344,7 +459,7 @@ function MesheryApplications({
       action : function Action(key) {
         return (
           <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
-            <CloseIcon />
+            <CloseIcon style={iconMedium} />
           </IconButton>
         );
       },
@@ -358,38 +473,44 @@ function MesheryApplications({
     };
   }
 
-  function handleSubmit(data, id, name, type) {
+  async function handleSubmit({ data, id, name, type, source_type }) {
     updateProgress({ showProgress : true })
     if (type === FILE_OPS.DELETE) {
-      dataFetch(
-        `/api/application/${id}`,
-        {
-          credentials : "include",
-          method : "DELETE",
-        },
-        () => {
-          console.log("ApplicationFile API", `/api/application/${id}`);
-          updateProgress({ showProgress : false });
-          fetchApplications(page, pageSize, search, sortOrder);
-          resetSelectedRowData()();
-        },
-        // handleError
-        handleError(ACTION_TYPES.DELETE_APPLICATIONS)
-      );
+      const response = await showModal(1);
+      if (response=="No"){
+        updateProgress({ showProgress : false })
+        return;
+      }
+      deleteApplication(id);
     }
 
     if (type === FILE_OPS.UPDATE) {
+      let response = await showUpdateModel("");
+      if (response=="No"){
+        updateProgress({ showProgress : false })
+        return;
+      }
       dataFetch(
-        `/api/application`,
+        `/api/application/${source_type}`,
         {
           credentials : "include",
-          method : "POST",
-          body : JSON.stringify({ application_data : { id, application_file : data }, save : true }),
+          method : "PUT",
+          body : JSON.stringify({ application_data : { id, name, application_file : data }, save : true }),
         },
         () => {
-          console.log("ApplicationFile API", `/api/application`);
+          console.log("ApplicationFile API", `/api/application/${source_type}`);
           updateProgress({ showProgress : false });
-          fetchApplications(page, pageSize, search, sortOrder);
+          enqueueSnackbar(`"${name}" Application updated`, {
+            variant : "success",
+            action : function Action(key) {
+              return (
+                <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
+                  <CloseIcon style={iconMedium} />
+                </IconButton>
+              );
+            },
+            autoHideDuration : 2000,
+          });
         },
         // handleError
         handleError(ACTION_TYPES.UPDATE_APPLICATIONS)
@@ -399,51 +520,52 @@ function MesheryApplications({
     if (type === FILE_OPS.FILE_UPLOAD || type === FILE_OPS.URL_UPLOAD) {
       let body = { save : true }
       if (type === FILE_OPS.FILE_UPLOAD) {
-        body = JSON.stringify({ ...body,   application_data : { application_file : data }
+        body = JSON.stringify({
+          ...body, application_data : { name : name || getRandomName(), application_file : data }
         })
       }
       if (type === FILE_OPS.URL_UPLOAD) {
         body = JSON.stringify({ ...body, url : data })
       }
       dataFetch(
-        `/api/application`,
+        `/api/application/${source_type}`,
         {
           credentials : "include",
           method : "POST",
-          body
+          body,
         },
         () => {
-          console.log("ApplicationFile API", `/api/application`);
+          console.log("ApplicationFile API", `/api/application/${source_type}`);
           updateProgress({ showProgress : false });
-          fetchApplications(page, pageSize, search, sortOrder);
         },
-        // handleError
         handleError(ACTION_TYPES.UPLOAD_APPLICATION)
       );
     }
   }
 
-  function uploadHandler(ev) {
+  function uploadHandler(ev, source_type) {
     if (!ev.target.files?.length) return;
 
     const file = ev.target.files[0];
-
     // Create a reader
     const reader = new FileReader();
     reader.addEventListener("load", (event) => {
-      handleSubmit(
-        event.target.result,
-        "",
-        file?.name || "meshery_" + Math.floor(trueRandom() * 100),
-        FILE_OPS.FILE_UPLOAD,
-      );
+      handleSubmit({
+        data : event.target.result,
+        name : file?.name || "meshery_" + Math.floor(trueRandom() * 100),
+        type : FILE_OPS.FILE_UPLOAD,
+        source_type : source_type
+      });
     });
     reader.readAsText(file);
   }
 
-  function urlUploadHandler(link) {
-    handleSubmit(link, "", "meshery_" + Math.floor(trueRandom() * 100), FILE_OPS.URL_UPLOAD);
-    // console.log(link, "valid");
+  function urlUploadHandler(link, source_type) {
+    handleSubmit({
+      data : link, id : "", name : "meshery_" + Math.floor(trueRandom() * 100), type : FILE_OPS.URL_UPLOAD,
+      source_type : source_type
+    });
+    console.log(link, source_type, "valid");
   }
 
   const columns = [
@@ -508,6 +630,41 @@ function MesheryApplications({
       },
     },
     {
+      name : "source_type",
+      label : "Source Type",
+      options : {
+        filter : false,
+        sort : false,
+        searchable : false,
+        customHeadRender : function CustomHead({ index, ...column }) {
+          return (
+            <TableCell key={index}>
+              <Tooltip title="Click source type to download Application">
+                <div style={{ display : "flex" }}>
+                  <b>{column.label}</b>
+                  <InfoIcon color="primary" style={iconSmall}/>
+                </div>
+              </Tooltip>
+            </TableCell>
+          );
+        },
+        customBodyRender : function CustomBody(_, tableMeta) {
+          const rowData = applications[tableMeta.rowIndex];
+          console.log(rowData);
+          return (
+            <>
+              <IconButton
+                title="click to download"
+                onClick={() => handleAppDownload(rowData.id ,rowData.type.String, rowData.name)}
+              >
+                <img src={`/static/img/${(rowData.type.String).replaceAll(" ", "_").toLowerCase()}.svg`} width="45px" height="45px" />
+              </IconButton>
+            </>
+          );
+        },
+      },
+    },
+    {
       name : "Actions",
       options : {
         filter : false,
@@ -524,25 +681,23 @@ function MesheryApplications({
           const rowData = applications[tableMeta.rowIndex];
           return (
             <>
-              <Tooltip
-                title="configure">
-                <IconButton onClick={() => setShowForm({ application : applications[tableMeta.rowIndex], show : true })}>
-                  <AppsIcon />
-                </IconButton>
-              </Tooltip>
-              <IconButton>
-                <PlayArrowIcon
-                  title="Deploy"
-                  aria-label="deploy"
-                  color="inherit"
-                  onClick={() => handleDeploy(rowData.application_file)} //deploy endpoint to be called here
-                />
-              </IconButton>
+              <TooltipIcon
+                title="Deploy"
+                onClick={() => handleModalOpen(rowData.application_file, rowData.name, true)}
+              >
+                <DoneAllIcon data-cy="deploy-button" style={iconMedium}  />
+              </TooltipIcon>
+              <TooltipIcon
+                title="Undeploy"
+                onClick={() => handleModalOpen(rowData.application_file, rowData.name, false)}
+              >
+                <UndeployIcon fill="#F91313" data-cy="undeploy-button" />
+              </TooltipIcon>
             </>
           );
         },
       },
-    },
+    }
   ];
 
   columns.forEach((column, idx) => {
@@ -560,6 +715,14 @@ function MesheryApplications({
     return response;
   }
 
+  async function showUpdateModel(count){
+    let response = await modalRef.current.show({
+      title : `Update ${count ? count : ""} Application${count > 1 ? "s" : ''}?`,
+      subtitle : `Are you sure you want to update ${count > 1 ? "these" : 'this'} ${count ? count : ""} application${count > 1 ? "s" : ''}?`,
+      options : ["Yes","No"],
+    });
+    return response;
+  }
   async function deleteApplication(id) {
     dataFetch(
       `/api/application/${id}`,
@@ -576,12 +739,11 @@ function MesheryApplications({
           action : function Action(key) {
             return (
               <IconButton key="close" aria-label="Close" color="inherit" onClick={() => closeSnackbar(key)}>
-                <CloseIcon />
+                <CloseIcon style={iconMedium} />
               </IconButton>
             );
           },
         });
-        fetchApplications(page, pageSize, search, sortOrder);
       },
       handleError("Failed to delete application")
     );
@@ -607,9 +769,8 @@ function MesheryApplications({
         text : "application(s) selected"
       }
     },
-    customToolbar : CustomToolbar(uploadHandler,urlUploadHandler),
 
-    onCellClick : (_, meta) => meta.colIndex !== 3 && setSelectedRowData(applications[meta.rowIndex]),
+    onCellClick : (_, meta) => meta.colIndex !== 3 && meta.colIndex !== 4 && setSelectedRowData(applications[meta.rowIndex]),
 
     onRowsDelete : async function handleDelete(row) {
       let response = await showModal(Object.keys(row.lookup).length);
@@ -618,8 +779,8 @@ function MesheryApplications({
         const fid = Object.keys(row.lookup).map(idx => applications[idx]?.id);
         fid.forEach(fid => deleteApplication(fid));
       }
-      if (response === "No")
-        fetchApplications(page, pageSize, search, sortOrder);
+      // if (response === "No")
+      // fetchApplications(page, pageSize, search, sortOrder);
     },
 
     onTableChange : (action, tableState) => {
@@ -633,10 +794,11 @@ function MesheryApplications({
 
       switch (action) {
         case "changePage":
-          fetchApplications(tableState.page, pageSize, search, sortOrder);
+          console.log("PPPPPPPPPPPPP------", tableState);
+          initAppsSubscription(tableState.page.toString(), pageSize.toString(), search, order);
           break;
         case "changeRowsPerPage":
-          fetchApplications(page, tableState.rowsPerPage, search, sortOrder);
+          initAppsSubscription(page.toString(), tableState.rowsPerPage.toString(), search, order)
           break;
         case "search":
           if (searchTimeout.current) {
@@ -659,320 +821,110 @@ function MesheryApplications({
             }
           }
           if (order !== sortOrder) {
-            fetchApplications(page, pageSize, search, order);
+            initAppsSubscription(page.toString(), pageSize.toString(), search, order);
           }
           break;
       }
     },
+    setRowProps : (row, dataIndex, rowIndex) => {
+      return {
+        "data-cy" : `config-row-${rowIndex}`
+      }
+    },
+    setTableProps : () => {
+      return {
+        "data-cy" : "applications-grid"
+      }
+    }
   };
 
   return (
-    <NoSsr>
-      {showForm &&
-        <PatternForm onSubmit={handleSubmit} show={setShowForm} application={showForm.application} />}
-      {selectedRowData && Object.keys(selectedRowData).length > 0 && (
-        <YAMLEditor application={selectedRowData} onClose={resetSelectedRowData()} onSubmit={handleSubmit} />
-      )}
-      {
-        !showForm && <MuiThemeProvider theme={getMuiTheme()}><MUIDataTable
-          title={<div className={classes.tableHeader}>Applications</div>}
-          data={applications}
-          columns={columns}
-          // @ts-ignore
-          options={options}
-          className={classes.muiRow}
+    <>
+
+      <NoSsr>
+        {selectedRowData && Object.keys(selectedRowData).length > 0 && (
+          <YAMLEditor application={selectedRowData} onClose={resetSelectedRowData()} onSubmit={handleSubmit} />
+        )}
+        <div className={classes.topToolbar} >
+          {!selectedApplication.show && (applications.length>0 || viewType==="table") && <div className={classes.createButton}>
+            <div>
+              <Button
+                aria-label="Add Application"
+                variant="contained"
+                color="primary"
+                size="large"
+                // @ts-ignore
+                onClick={handleUploadImport}
+                style={{ marginRight : "2rem" }}
+              >
+                <PublishIcon className={classes.addIcon} style={iconMedium}  />
+              Import Application
+              </Button>
+            </div>
+
+          </div>
+          }
+          {!selectedApplication.show &&
+          <div className={classes.viewSwitchButton}>
+            <ViewSwitch view={viewType} changeView={setViewType} hideCatalog={true} />
+          </div>
+          }
+        </div>
+        {
+          !selectedApplication.show && viewType==="table" &&
+            <MUIDataTable
+              title={<div className={classes.tableHeader}>Applications</div>}
+              data={applications}
+              columns={columns}
+              // @ts-ignore
+              options={options}
+              className={classes.muiRow}
+            />
+        }
+        {
+          !selectedApplication.show && viewType==="grid" &&
+            // grid vieww
+            <ApplicationsGrid
+              applications={applications}
+              handleDeploy={handleDeploy}
+              handleUnDeploy={handleUnDeploy}
+              handleSubmit={handleSubmit}
+              urlUploadHandler={urlUploadHandler}
+              uploadHandler={uploadHandler}
+              setSelectedApplication={setSelectedApplication}
+              selectedApplication={selectedApplication}
+              pages={Math.ceil(count / pageSize)}
+              setPage={setPage}
+              selectedPage={page}
+              UploadImport={UploadImport}
+              types={types}
+              handleAppDownload={handleAppDownload}
+            />
+        }
+        <ConfirmationMsg
+          open={modalOpen.open}
+          handleClose={handleModalClose}
+          submit={
+            { deploy : () => handleDeploy(modalOpen.application_file, modalOpen.name),  unDeploy : () => handleUnDeploy(modalOpen.application_file, modalOpen.name) }
+          }
+          isDelete={!modalOpen.deploy}
+          title={ modalOpen.name }
+          componentCount={modalOpen.count}
+          tab={modalOpen.deploy ? 0 : 1}
         />
-        </MuiThemeProvider>
-      }
-      <PromptComponent ref={modalRef} />
-    </NoSsr>
+        <PromptComponent ref={modalRef} />
+        <UploadImport open={importModal.open} handleClose={handleUploadImportClose} isApplication = {true} aria-label="URL upload button" handleUrlUpload={urlUploadHandler} handleUpload={uploadHandler}
+          supportedTypes={types} configuration="Application"  />
+      </NoSsr>
+    </>
   );
 }
 
 const mapDispatchToProps = (dispatch) => ({ updateProgress : bindActionCreators(updateProgress, dispatch), });
 
 const mapStateToProps = (state) => {
-  return { user : state.get("user")?.toObject(), };
+  return { user : state.get("user")?.toObject(), selectedK8sContexts : state.get("selectedK8sContexts") };
 };
 
 // @ts-ignore
 export default withStyles(styles)(connect(mapStateToProps, mapDispatchToProps)(withSnackbar(MesheryApplications)));
-
-// --------------------------------------------------------------------------------------------------
-// -------------------------------------------- Aplications Configuration---------------------------------------
-// --------------------------------------------------------------------------------------------------
-
-function PatternForm({ application, onSubmit, show }) {
-  const [schemaSet, setSchemaSet] = useState();
-  const [deployServiceConfig, setDeployServiceConfig] = useState(getPatternJson() || {});
-  const [yaml, setYaml] = useState("");
-  const [expanded, setExpanded] = useState([]);
-  // const [changedYaml, setChangedYaml] = useState("");
-  const classes = useStyles();
-
-  function getPatternJson() {
-    const patternString = application.application_file;
-    return jsYaml.load(patternString).services;
-  }
-
-  async function fetchWorkloadAndTraitsSchema() {
-    try {
-      const workloads = await promisifiedDataFetch("/api/oam/workload");
-      const traits = await promisifiedDataFetch("/api/oam/trait");
-
-      const workloadTraitSets = createWorkloadTraitSets(workloads, traits);
-
-      return workloadTraitSets;
-    } catch (e) {
-      console.log("Error in Fetching Workload or traits", e);
-      return {};
-    }
-  }
-
-  function createWorkloadTraitSets(workloads, traits) {
-    const sets = [];
-    workloads?.forEach((w) => {
-      const item = { workload : w, traits : [] };
-
-      item.traits = traits?.filter((t) => {
-        if (Array.isArray(t?.oam_definition?.spec?.appliesToWorkloads))
-          return t?.oam_definition?.spec?.appliesToWorkloads?.includes(w?.oam_definition?.metadata?.name);
-
-        return false;
-      });
-
-      sets.push(item);
-    });
-
-    return sets;
-  }
-
-  async function getJSONSchemaSets() {
-    const wtSets = await fetchWorkloadAndTraitsSchema();
-
-    return wtSets?.map((s) => {
-      const item = {
-        workload : JSON.parse(s.workload?.oam_ref_schema),
-        traits : s.traits?.map((t) => {
-          const trait = JSON.parse(t?.oam_ref_schema);
-
-          // Attaching internal metadata to the json schema
-          trait._internal = {
-            patternAttributeName : t?.oam_definition.metadata.name,
-          };
-
-          return trait;
-        }),
-        type : s.workload?.metadata?.["ui.meshery.io/category"],
-      };
-
-      // Attaching internal metadata to the json schema
-      item.workload._internal = {
-        patternAttributeName : s.workload?.oam_definition.metadata.name,
-      };
-
-      return item;
-    });
-  }
-
-  function getPatternAttributeName(jsonSchema) {
-    return PascalCaseToKebab(jsonSchema?._internal?.patternAttributeName || "NA");
-  }
-
-  function getPatternKey(cfg) {
-    return Object.keys(cfg?.services)?.[0] || undefined;
-  }
-
-  const handleSubmit = (cfg, patternName) => {
-    console.log("submitted", { cfg, patternName });
-    const key = getPatternKey(cfg);
-    handleDeploy({ ...deployServiceConfig, [getPatternKey(cfg)] : cfg?.services?.[key] });
-    if (key)
-      setDeployServiceConfig({ ...deployServiceConfig, [getPatternKey(cfg)] : cfg?.services?.[key] });
-    handleExpansion(patternName);
-  };
-
-  const handleChangeData = (cfg, patternName) => {
-    console.log("Ran Changed", { cfg, patternName });
-    const key = getPatternKey(cfg);
-    handleDeploy({ ...deployServiceConfig, [getPatternKey(cfg)] : cfg?.services?.[key] });
-    if (key)
-      setDeployServiceConfig({ ...deployServiceConfig, [getPatternKey(cfg)] : cfg?.services?.[key] });
-  };
-
-  const handleDelete = (cfg, patternName) => {
-    console.log("deleted", cfg);
-    const newCfg = schemaSet.filter(schema => schema.workload.title !== patternName);
-    setSchemaSet(newCfg);
-  };
-
-  const handleDeploy = (cfg) => {
-    const deployConfig = {};
-    deployConfig.name = application.name;
-    deployConfig.services = cfg;
-    const deployConfigYaml = jsYaml.dump(deployConfig);
-    setYaml(deployConfigYaml);
-  };
-
-  const handleExpansion = (item) => {
-    let expandedItems = [...expanded];
-    if (expandedItems.includes(item)) {
-      expandedItems = expandedItems.filter(el => el !== item);
-    } else {
-      expandedItems.push(item);
-    }
-    setExpanded(expandedItems);
-  };
-
-  function handleSubmitFinalPattern(yaml, id, name, action) {
-    onSubmit(yaml, id, name, action);
-    show(false);
-  }
-
-  const ns = "default";
-
-  function saveCodeEditorChanges(data) {
-    setYaml(data.valueOf().getValue());
-  }
-
-  useEffect(() => {
-    getJSONSchemaSets().then((res) => setSchemaSet(res));
-  }, []);
-
-  if (!schemaSet) {
-    return <CircularProgress />;
-  }
-
-  return (
-    <>
-      <AppBar position="static" className={classes.appBar} elevation={0}>
-        <Toolbar>
-          <IconButton edge="start" className={classes.backButton} color="inherit" onClick={() => show(false)}>
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" className={classes.title}>
-            Edit Application Configuration of <i>{`${application.name}`}</i>
-          </Typography>
-        </Toolbar>
-      </AppBar>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          {schemaSet
-            .filter((s) => s.type !== "addon")
-            .sort((a, b) => (a.workload?.title < b.workload?.title ? -1 : 1))
-            .map((s) => (
-              accordion(s)
-            ))}
-          <Accordion
-            expanded={expanded.includes('addon')}
-            onChange={() => handleExpansion('addon')}
-            style={{ width : '100%' }}
-          >
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">
-                Configure Addons
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              {schemaSet
-                .filter((s) => s.type === "addon")
-                .sort((a, b) => (a.workload?.title < b.workload?.title ? -1 : 1))
-                .map((s) => (
-                  <Grid item>
-                    <PatternServiceForm formData={deployServiceConfig[s.workload?.title]} onChange={handleChangeData} schemaSet={s} onSubmit={handleSubmit} onDelete={handleDelete} namespace={ns} />
-                  </Grid>
-                ))}
-            </AccordionDetails>
-          </Accordion>
-        </Grid>
-        <Grid item xs={12} md={6} >
-          <CodeEditor />
-        </Grid>
-      </Grid>
-    </>
-  );
-
-  function CustomButton({ title, onClick }) {
-    return <Button
-      fullWidth
-      color="primary"
-      variant="contained"
-      onClick={onClick}
-      style={{
-        marginTop : "16px",
-        padding : "10px"
-      }}
-    >
-      {title}
-    </Button>;
-  }
-
-  function accordion(schema) {
-    const patternName = schema?.workload?.title;
-
-    return <Accordion
-      expanded={expanded.includes(patternName)}
-      onChange={() => handleExpansion(patternName)}
-      style={{ width : '100%' }}
-    >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Typography variant="h6">
-          {patternName || "Expand More"}
-        </Typography>
-      </AccordionSummary>
-      <AccordionDetails>
-        <PatternServiceForm formData={deployServiceConfig[getPatternAttributeName(schema.workload)]} onChange={handleChangeData} schemaSet={schema} onSubmit={(val) => handleSubmit(val, patternName)} onDelete={(val) => handleDelete(val, patternName)} namespace={ns} />
-      </AccordionDetails>
-    </Accordion>;
-  }
-
-  function CodeEditor() {
-    const cardStyle = { marginBottom : "16px", position : "sticky", float : "right", minWidth : "100%" };
-    const cardcontentStyle = { margin : "16px" };
-
-    const classes = useStyles();
-
-    return (
-      <div>
-        <Card style={cardStyle}>
-          <CardContent style={cardcontentStyle}>
-            <CodeMirror
-              value={yaml}
-              className={classes.codeMirror}
-              options={{
-                theme : "material",
-                lineNumbers : true,
-                lineWrapping : true,
-                gutters : ["CodeMirror-lint-markers"],
-                lint : true,
-                mode : "text/x-yaml",
-              }}
-              onBlur={(a) => saveCodeEditorChanges(a)}
-            />
-            <CustomButton title="Save Application" onClick={() => handleSubmitFinalPattern(yaml, "", `meshery_${Math.floor(trueRandom() * 100)}`, FILE_OPS.FILE_UPLOAD)} />
-            <CardActions style={{ justifyContent : "flex-end" }}>
-              <Tooltip title="Update Application">
-                <IconButton
-                  aria-label="Update"
-                  color="primary"
-                  onClick={() => handleSubmitFinalPattern(yaml, application.id, application.name, FILE_OPS.UPDATE)}
-                >
-                  <SaveIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Delete Application">
-                <IconButton
-                  aria-label="Delete"
-                  color="primary"
-                  onClick={() => handleSubmitFinalPattern(yaml, application.id, application.name, FILE_OPS.DELETE)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
-            </CardActions>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-}

@@ -23,7 +23,6 @@ import (
 	"os/exec"
 
 	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/config"
-	"github.com/layer5io/meshery/mesheryctl/internal/cli/root/constants"
 
 	"github.com/layer5io/meshery/mesheryctl/pkg/utils"
 	"github.com/pkg/errors"
@@ -36,7 +35,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func getContexts(configFile, tokenPath string) ([]string, error) {
+func getContexts(configFile string) ([]string, error) {
 	client := &http.Client{}
 
 	mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
@@ -52,11 +51,6 @@ func getContexts(configFile, tokenPath string) ([]string, error) {
 		return nil, err
 	}
 
-	err = utils.AddAuthDetails(req, tokenPath)
-	if err != nil {
-		return nil, err
-	}
-
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -66,20 +60,32 @@ func getContexts(configFile, tokenPath string) ([]string, error) {
 		return nil, err
 	}
 
+	log.Debugf("Get context API response: %s", string(body))
 	var results []map[string]interface{}
 	err = json.Unmarshal(body, &results)
 	if err != nil {
 		return nil, err
 	}
 
-	var contexts []string
-	for _, item := range results {
-		contexts = append(contexts, item["contextName"].(string))
+	if results == nil {
+		errstr := "Error unmarshalling the context info, check " + configFile + " file"
+		return nil, errors.New(errstr)
 	}
-	return contexts, nil
+
+	var contextNames []string
+	for _, ctx := range results {
+		ctxname, ok := ctx["name"].(string)
+		if !ok {
+			errstr := "Invalid context name: context name should be a string"
+			return nil, errors.New(errstr)
+		}
+		contextNames = append(contextNames, ctxname)
+	}
+	log.Debugf("Available contexts: %s", contextNames)
+	return contextNames, nil
 }
 
-func setContext(configFile, cname, tokenPath string) error {
+func setContext(configFile, cname string) error {
 	client := &http.Client{}
 	extraParams1 := map[string]string{
 		"contextName": cname,
@@ -95,10 +101,6 @@ func setContext(configFile, cname, tokenPath string) error {
 	if err != nil {
 		return err
 	}
-	err = utils.AddAuthDetails(req, tokenPath)
-	if err != nil {
-		return err
-	}
 	res, err := client.Do(req)
 	if err != nil {
 		return err
@@ -108,7 +110,7 @@ func setContext(configFile, cname, tokenPath string) error {
 		return err
 	}
 	// TODO: Pretty print the output
-	fmt.Printf("%v\n", string(body))
+	log.Debugf("Set context API response: %s", string(body))
 	return nil
 }
 
@@ -117,18 +119,19 @@ var aksConfigCmd = &cobra.Command{
 	Short: "Configure Meshery to use AKS cluster",
 	Long:  `Configure Meshery to connect to AKS cluster`,
 	Example: `
-	Configure Meshery to connect to AKS cluster using auth token
-	mesheryctl system config aks --token auth.json
+// Configure Meshery to connect to AKS cluster using auth token
+mesheryctl system config aks --token auth.json
+
+// Configure Meshery to connect to AKS cluster (if session is logged in using login subcommand)
+mesheryctl system config aks
 	`,
-	Args: cobra.ExactArgs(0),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// set default tokenpath for system config command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-			if tokenPath == "" {
-				log.Fatal("Token path invalid")
-			}
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) >= 1 {
+			return errors.New("more than one config name provided")
 		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
 		aksCheck := exec.Command("az", "version")
 		aksCheck.Stdout = os.Stdout
 		aksCheck.Stderr = os.Stderr
@@ -186,18 +189,19 @@ var eksConfigCmd = &cobra.Command{
 	Short: "Configure Meshery to use EKS cluster",
 	Long:  `Configure Meshery to connect to EKS cluster`,
 	Example: `
-	Configure Meshery to connect to EKS cluster using auth token
-	mesheryctl system config eks --token auth.json
+// Configure Meshery to connect to EKS cluster using auth token
+mesheryctl system config eks --token auth.json
+
+// Configure Meshery to connect to EKS cluster (if session is logged in using login subcommand)
+mesheryctl system config eks
 	`,
-	Args: cobra.ExactArgs(0),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// set default tokenpath for system config command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-			if tokenPath == "" {
-				log.Fatal("Token path invalid")
-			}
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) >= 1 {
+			return errors.New("more than one config name provided")
 		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
 		eksCheck := exec.Command("aws", "--version")
 		eksCheck.Stdout = os.Stdout
 		eksCheck.Stderr = os.Stderr
@@ -255,18 +259,19 @@ var gkeConfigCmd = &cobra.Command{
 	Short: "Configure Meshery to use GKE cluster",
 	Long:  `Configure Meshery to connect to GKE cluster`,
 	Example: `
-	Configure Meshery to connect to GKE cluster using auth token
-	mesheryctl system config gke --token auth.json
+// Configure Meshery to connect to GKE cluster using auth token
+mesheryctl system config gke --token auth.json
+
+// Configure Meshery to connect to GKE cluster (if session is logged in using login subcommand)
+mesheryctl system config gke
 	`,
-	Args: cobra.ExactArgs(0),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// set default tokenpath for system config command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-			if tokenPath == "" {
-				log.Fatal("Token path invalid")
-			}
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) >= 1 {
+			return errors.New("more than one config name provided")
 		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO: move the GenerateConfigGKE logic to meshkit/client-go
 		log.Info("Configuring Meshery to access GKE...")
 		SAName := "sa-meshery-" + utils.StringWithCharset(8)
@@ -287,19 +292,19 @@ var minikubeConfigCmd = &cobra.Command{
 	Short: "Configure Meshery to use minikube cluster",
 	Long:  `Configure Meshery to connect to minikube cluster`,
 	Example: `
-	Configure Meshery to connect to minikube cluster using auth token
-	mesheryctl system config minikube --token auth.json
-	`,
-	Args: cobra.ExactArgs(0),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// set default tokenpath for system config command.
-		if tokenPath == "" {
-			tokenPath = constants.GetCurrentAuthToken()
-			if tokenPath == "" {
-				log.Fatal("Token path invalid")
-			}
-		}
+// Configure Meshery to connect to minikube cluster using auth token
+mesheryctl system config minikube --token auth.json
 
+// Configure Meshery to connect to minikube cluster (if session is logged in using login subcommand)
+mesheryctl system config minikube
+	`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) >= 1 {
+			return errors.New("more than one config name provided")
+		}
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
 		log.Info("Configuring Meshery to access Minikube...")
 		// Get the config from the default config path
 		if _, err = os.Stat(utils.KubeConfig); err != nil {
@@ -335,11 +340,29 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Configure Meshery",
 	Long:  `Configure the Kubernetes cluster used by Meshery.`,
-	Args:  cobra.ExactArgs(1),
+	Args: func(_ *cobra.Command, args []string) error {
+		const errMsg = `Usage: mesheryctl system config [aks|eks|gke|minikube]
+Example: mesheryctl system config eks
+Description: Configure the Kubernetes cluster used by Meshery.`
+
+		if len(args) == 0 {
+			return fmt.Errorf("name of kubernetes cluster to configure Meshery not provided\n\n%v", errMsg)
+		} else if len(args) > 1 {
+			return fmt.Errorf("expected one argument received multiple arguments")
+		}
+		return nil
+	},
+	Example: `
+// Set configuration according to k8s cluster
+mesheryctl system config [aks|eks|gke|minikube]
+
+// Path to token for authenticating to Meshery API (optional, can be done alternatively using "login")
+mesheryctl system config --token "~/Downloads/auth.json"
+	`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		if ok := utils.IsValidSubcommand(availableSubcommands, args[0]); !ok {
-			return errors.New(utils.SystemError(fmt.Sprintf("invalid command: \"%s\"", args[0])))
+			return errors.New(utils.SystemError(fmt.Sprintf("invalid command: \"%s\".", args[0])))
 		}
 		return nil
 	},
@@ -353,18 +376,18 @@ func init() {
 		minikubeConfigCmd,
 	}
 
-	aksConfigCmd.Flags().StringVarP(&tokenPath, "token", "t", utils.AuthConfigFile, "Path to token for authenticating to Meshery API")
-	eksConfigCmd.Flags().StringVarP(&tokenPath, "token", "t", utils.AuthConfigFile, "Path to token for authenticating to Meshery API")
-	gkeConfigCmd.Flags().StringVarP(&tokenPath, "token", "t", utils.AuthConfigFile, "Path to token for authenticating to Meshery API")
-	minikubeConfigCmd.Flags().StringVarP(&tokenPath, "token", "t", utils.AuthConfigFile, "Path to token for authenticating to Meshery API")
+	aksConfigCmd.Flags().StringVarP(&utils.TokenFlag, "token", "t", "", "Path to token for authenticating to Meshery API")
+	eksConfigCmd.Flags().StringVarP(&utils.TokenFlag, "token", "t", "", "Path to token for authenticating to Meshery API")
+	gkeConfigCmd.Flags().StringVarP(&utils.TokenFlag, "token", "t", "", "Path to token for authenticating to Meshery API")
+	minikubeConfigCmd.Flags().StringVarP(&utils.TokenFlag, "token", "t", "", "Path to token for authenticating to Meshery API")
 
 	configCmd.AddCommand(availableSubcommands...)
 }
 
 // Given the token path, get the context and set the token in the chosen context
 func setToken() {
-	log.Debugf("Token path: %s", tokenPath)
-	contexts, err := getContexts(utils.ConfigPath, tokenPath)
+	log.Debugf("Token path: %s", utils.TokenFlag)
+	contexts, err := getContexts(utils.ConfigPath)
 	if err != nil || contexts == nil || len(contexts) < 1 {
 		log.Fatalf("Error getting context: %s", err.Error())
 	}
@@ -384,8 +407,8 @@ func setToken() {
 		choosenCtx = contexts[choice-1]
 	}
 
-	log.Debugf("Chosen context : %s", choosenCtx)
-	err = setContext(utils.ConfigPath, choosenCtx, tokenPath)
+	log.Debugf("Chosen context : %s out of the %d available contexts", choosenCtx, len(contexts))
+	err = setContext(utils.ConfigPath, choosenCtx)
 	if err != nil {
 		log.Fatalf("Error setting context: %s", err.Error())
 	}

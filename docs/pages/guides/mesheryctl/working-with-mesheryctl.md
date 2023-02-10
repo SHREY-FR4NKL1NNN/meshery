@@ -1,14 +1,14 @@
 ---
 layout: default
-title: Using mesheryctl
+title: Using Meshery CLI
 description: How to use mesheryctl
-permalink: guides/mesheryctl/using-mesheryctl
+permalink: guides/mesheryctl/working-with-mesheryctl
 language: en
 type: Guides
 category: mesheryctl
 ---
 
-Meshery's command line interface is `mesheryctl`. Use `mesheryctl` to both manage the lifecyle of Meshery itself and to access and invoke any of Meshery's application and service mesh management functions. `mesheryctl` commands can be categorized as follows:
+Meshery's command line interface is `mesheryctl`. Use `mesheryctl` to both manage the lifecyle of Meshery itself and to access and invoke any of Meshery's application and cloud native management functions. `mesheryctl` commands can be categorized as follows:
 
 - `mesheryctl` - Global overrides and flags
 - `mesheryctl app` - Service Mesh Application Management
@@ -37,7 +37,6 @@ A meshconfig `context` represents a single Meshery deployment. Using `context`s,
 #### Question: Why are contexts necessary?
 
 Many Meshery users have more than one Meshery deployment. Contexts allow you to deploy different versions of Meshery, update your release channel subscription settings, selectively install one or more Meshery Adapters, and so on. Contexts allow you to configure your invididual Meshery deployments.
-
 
 #### Question: What is `current-context`?
 
@@ -99,7 +98,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 ```
 
-# Suggested Reading
+### Suggested Reading
 
 For an exhaustive list of `mesheryctl` commands and syntax:
 
@@ -114,6 +113,8 @@ Guides to using Meshery's various features and components.
 {% endcapture %}
 
 {% include suggested-reading.html diffName="true" isDiffTag="true" diffTag=tag %}
+
+{% include related-discussions.html tag="mesheryctl" %}
 
 <!-- ## Related Guides
 
@@ -158,7 +159,6 @@ To install `mesheryctl`, execute the following commands:
 
  <pre class="codeblock-pre"><div class="codeblock">
  <div class="clipboardjs">
- brew tap layer5io/tap
  brew install mesheryctl
  mesheryctl system start
  </div></div>
@@ -182,7 +182,7 @@ Install `mesheryctl` and run Meshery on Mac or Linux with this script:
 
  <pre class="codeblock-pre"><div class="codeblock">
  <div class="clipboardjs">
- curl -L https://git.io/meshery | bash -
+ curl -L https://meshery.io/install | bash -
  </div></div>
  </pre>
 
@@ -192,7 +192,7 @@ Upgrade `mesheryctl` and run Meshery on Mac or Linux with this script:
 
  <pre class="codeblock-pre"><div class="codeblock">
  <div class="clipboardjs">
- curl -L https://git.io/meshery | bash -
+ curl -L https://meshery.io/install | bash -
  </div></div>
  </pre>
 
@@ -234,4 +234,6 @@ To upgrade `mesheryctl`, execute the following command:
  </pre>
 
 -->
+
 {% include discuss.html %}
+

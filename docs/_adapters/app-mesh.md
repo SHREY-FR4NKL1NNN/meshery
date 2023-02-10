@@ -4,18 +4,35 @@ title: Meshery Adapter for App Mesh
 name: Meshery Adapter for App Mesh
 mesh_name: App Mesh
 earliest_version: v1.4.1
-port: 10005/tcp
+port: 10005/gRPC
 project_status: beta
 github_link: https://github.com/meshery/meshery-app-mesh
 image: /assets/img/service-meshes/app-mesh.svg
 permalink: service-meshes/adapters/app-mesh
 ---
 
+{% assign sorted_tests_group = site.compatibility | group_by: "meshery-component" %}
+{% for group in sorted_tests_group %}
+      {% if group.name == "meshery-app-mesh" %}
+        {% assign items = group.items | sort: "meshery-component-version" | reverse %}
+        {% for item in items %}
+          {% if item.meshery-component-version != "edge" %}
+            {% if item.overall-status == "passing" %}
+              {% assign adapter_version_dynamic = item.meshery-component-version %}
+              {% break %}
+            {% elsif item.overall-status == "failing" %}
+              {% continue %}
+            {% endif %}
+          {% endif %}
+        {% endfor %} 
+      {% endif %}
+{% endfor %}
+
 {% include adapter-status.html %}
 
 ## Lifecycle management
 
-The {{page.name}} can install **{{page.version}}** of {{page.mesh_name}}. A number of sample applications can be installed using the {{page.name}}.
+The {{page.name}} can install **{{page.earliest_version}}** of {{page.mesh_name}} service mesh. A number of sample applications can be installed using the {{page.name}}.
 
 ### Features
 

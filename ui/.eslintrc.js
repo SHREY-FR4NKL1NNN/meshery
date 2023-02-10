@@ -1,39 +1,49 @@
 module.exports = {
-  "env" : { "browser" : true,
-    "es6" : true },
+  "env" : {
+    "browser" : true,
+    "es6" : true,
+    "node" : true // tells the parser that we are using nodejs
+  },
   'settings' : { 'react' : { 'version' : require('./package.json').dependencies.react, }, },
   "extends" : [
     "eslint:recommended",
     "plugin:react/recommended",
-    "plugin:cypress/recommended"
+    "plugin:cypress/recommended",
+    "next/core-web-vitals"
   ],
-  "globals" : { "Atomics" : "readonly",
-    "SharedArrayBuffer" : "readonly" },
-  'parser' : 'babel-eslint',
-  "parserOptions" : { "ecmaFeatures" : { "jsx" : true },
+  "globals" : {
+    "Atomics" : "readonly",
+    "SharedArrayBuffer" : "readonly"
+  },
+  "parser" : "@babel/eslint-parser",
+  "parserOptions" : {
+    "ecmaFeatures" : { "jsx" : true },
     "ecmaVersion" : 2018,
-    "sourceType" : "module" },
+    "sourceType" : "module"
+  },
   "plugins" : [
     "react",
     "cypress"
   ],
   "rules" : {
+    "@next/next/no-img-element" : "off", // turn off next img/image warning
+    "react-hooks/rules-of-hooks" : "error", // turn off react hooks rules of hooks
+    "jsx-a11y/alt-text" : "off", // turn off image alt text warning
     "array-bracket-spacing" : ["error", "never"],
     "comma-style" : ["error"],
-    "arrow-spacing" : [
-      "error",
-      { "after" : true,
-        "before" : true }
-    ],
     "jsx-quotes" : ["error", "prefer-double"],
     "block-scoped-var" : "error",
     "keyword-spacing" : "error",
     "no-trailing-spaces" : "error",
     "object-curly-spacing" : ["error", "always"],
-    "arrow-spacing" : ["error" ,{ "before" : true,
-      "after" : true, }],
-    "key-spacing" : ["error", { "beforeColon" : true,
-      "afterColon" : true, }],
+    "arrow-spacing" : ["error", {
+      "before" : true,
+      "after" : true,
+    }],
+    "key-spacing" : ["error", {
+      "beforeColon" : true,
+      "afterColon" : true,
+    }],
     "block-spacing" : "error",
     "brace-style" : [
       "error",
@@ -51,16 +61,15 @@ module.exports = {
       }
     ],
     "react/react-in-jsx-scope" : "off",
-    "no-undef" : "off",
-    "react/prop-types" : 0,
+    "no-undef" : "error",
     "react/jsx-uses-vars" : [
       2
     ],
     "react/jsx-no-undef" : "error",
     "no-console" : 0,
     "no-unused-vars" : "error",
-    "react/jsx-key" : "off",
-    "no-dupe-keys" : "off",
+    "react/jsx-key" : "warn",
+    "no-dupe-keys" : "error",
     "react/jsx-filename-extension" : [1, { "extensions" : [".js", ".jsx"] }],
     "react/prop-types" : "off"
   }

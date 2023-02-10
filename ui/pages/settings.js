@@ -1,10 +1,11 @@
 import MesherySettings from "../components/MesherySettings";
-import { NoSsr, withStyles, Paper } from "@material-ui/core";
+import { NoSsr, withStyles } from "@material-ui/core";
 import { updatepagepath } from "../lib/store";
 import { connect } from "react-redux";
 import Head from 'next/head';
 import { bindActionCreators } from 'redux';
 import { getPath } from "../lib/path";
+import React from "react";
 
 const styles = { paper : { maxWidth : '90%',
   margin : 'auto',
@@ -22,9 +23,7 @@ class Settings extends React.Component {
         <Head>
           <title>Settings | Meshery</title>
         </Head>
-        <Paper className={this.props.classes.paper}>
-          <MesherySettings />
-        </Paper>
+        <MesherySettings />
       </NoSsr>
     );
   }

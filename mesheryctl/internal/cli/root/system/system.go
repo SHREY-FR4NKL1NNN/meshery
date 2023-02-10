@@ -30,18 +30,19 @@ var (
 	// flag to change the current context to a temporary context
 	tempContext = ""
 	// token path
-	tokenPath string
 )
 
 // SystemCmd represents Meshery Lifecycle Management cli commands
 var SystemCmd = &cobra.Command{
 	Use:   "system",
 	Short: "Meshery Lifecycle Management",
-	Long:  `Manage the state and configuration of Meshery server, adapters, and client.`,
-	Args:  cobra.MinimumNArgs(1),
+	Long:  `Manage the state and configuration of Meshery server, components, and client.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
 		if ok := utils.IsValidSubcommand(availableSubcommands, args[0]); !ok {
-			return errors.New(utils.SystemError(fmt.Sprintf("invalid command: \"%s\"", args[0])))
+			return errors.New(utils.SystemError(fmt.Sprintf("'%s' is a invalid command.  Use 'mesheryctl system --help' to display usage guide.\n", args[0])))
 		}
 		mctlCfg, err := config.GetMesheryCtl(viper.GetViper())
 		if err != nil {
@@ -63,8 +64,8 @@ func init() {
 		updateCmd,
 		configCmd,
 		ContextCmd,
-		completionCmd,
 		channelCmd,
+		providerCmd,
 		checkCmd,
 		loginCmd,
 		logoutCmd,

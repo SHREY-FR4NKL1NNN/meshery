@@ -10,22 +10,24 @@ import {
 } from '@material-ui/core';
 import NoSsr from '@material-ui/core/NoSsr';
 import dataFetch from '../lib/data-fetch';
-import { updateUser, updateProgress } from '../lib/store';
+import { updateUser, updateProgress, toggleCatalogContent } from '../lib/store';
 import Tabs from '@material-ui/core/Tabs';
 import Tab from '@material-ui/core/Tab';
 import { Paper, Tooltip } from '@material-ui/core';
 import SettingsRemoteIcon from '@material-ui/icons/SettingsRemote';
 import SettingsCellIcon from '@material-ui/icons/SettingsCell';
 import ExtensionSandbox from "./ExtensionSandbox";
-import RemoteUserPref from "./RemoteUserPref";
+import RemoteComponent from "./RemoteComponent";
 import ExtensionPointSchemaValidator from "../utils/ExtensionPointSchemaValidator";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTachometerAlt } from '@fortawesome/free-solid-svg-icons';
 import MesherySettingsPerformanceComponent from './MesherySettingsPerformanceComponent';
+import { ctxUrl } from '../utils/multi-ctx';
+import { iconMedium } from '../css/icons.styles';
 
 
 const styles = (theme) => ({
-  root : {
+  statsWrapper : {
     maxWidth : "100%",
     height : 'auto',
     borderTopLeftRadius : 0,
@@ -92,24 +94,55 @@ class UserPreference extends React.Component {
     this.state = {
       anonymousStats : props.anonymousStats,
       perfResultStats : props.perfResultStats,
-      startOnZoom : props.startOnZoom,
       tabVal : 0,
       userPrefs : ExtensionPointSchemaValidator("user_prefs")(),
-      providerType : ''
+      providerType : '',
+      catalogContent : true,
+      extensionPreferences : {},
+      capabilitiesLoaded : false
     };
+  }
+
+  handleCatalogContentToggle = () => {
+    this.props.toggleCatalogContent({ catalogVisibility : !this.state.catalogContent });
+    this.setState((state) => ({ catalogContent : !state.catalogContent }), () => this.handleCatalogPreference());
+  }
+
+  handleCatalogPreference = () => {
+    let body = Object.assign({}, this.state.extensionPreferences)
+    body["catalogContent"] = this.state.catalogContent
+    dataFetch("/api/user/prefs",
+      { credentials : "include",
+        method : "POST",
+        body : JSON.stringify({ usersExtensionPreferences : body })
+      },
+      () => {
+        this.props.enqueueSnackbar(`Catalog Content was ${this.state.catalogContent ? "enab" : "disab"}led`,
+          { variant : 'success',
+            autoHideDuration : 4000,
+            action : (key) => (
+              <IconButton
+                key="close"
+                aria-label="Close"
+                color="inherit"
+                onClick={() => this.props.closeSnackbar(key)}
+              >
+                <CloseIcon style={iconMedium} />
+              </IconButton>
+            ),
+          });
+      },
+      this.handleError("There was an error sending your preference")
+    )
   }
 
   handleToggle = (name) => () => {
     const self = this;
     if (name == 'anonymousUsageStats') {
-      self.setState((state) => ({ anonymousStats : !state.anonymousStats }));
-    } else if (name == 'anonymousPerfResults') {
-      self.setState((state) => ({ perfResultStats : !state.perfResultStats }));
+      self.setState((state) => ({ anonymousStats : !state.anonymousStats }), () => this.handleChange(name));
     } else {
-      self.setState((state) => ({ startOnZoom : !state.startOnZoom }));
+      self.setState((state) => ({ perfResultStats : !state.perfResultStats }), () => this.handleChange(name));
     }
-
-    this.handleChange(name);
   }
 
   handleError = (msg) => () => {
@@ -123,7 +156,7 @@ class UserPreference extends React.Component {
           color="inherit"
           onClick={() => self.props.closeSnackbar(key)}
         >
-          <CloseIcon />
+          <CloseIcon style={iconMedium} />
         </IconButton>
       ),
       autoHideDuration : 8000, });
@@ -131,53 +164,53 @@ class UserPreference extends React.Component {
 
   handleChange = (name) => {
     const self = this;
-    const { anonymousStats, perfResultStats, startOnZoom } = this.state;
+    const { anonymousStats, perfResultStats } = this.state;
     let val, msg;
     if (name == 'anonymousUsageStats') {
       val = anonymousStats;
-      msg = !val
+      msg = val
         ? "Sending anonymous usage statistics was enabled"
         : "Sending anonymous usage statistics was disabled";
-
-    } else if (name == 'anonymousPerfResults') {
+    } else {
       val = perfResultStats;
-      msg = !val
+      msg = val
         ? "Sending anonymous performance results was enabled"
         : "Sending anonymous performance results was disabled";
-    } else {
-      val = startOnZoom;
-      msg = !val
-        ? "Start on Zoom was enabled"
-        : "Start on Zoom was disabled";
     }
 
-    const params = `${encodeURIComponent(name)}=${encodeURIComponent(!val)}`;
+    const requestBody = JSON.stringify({
+      "anonymousUsageStats" : anonymousStats,
+      "anonymousPerfResults" : perfResultStats,
+    });
+
+    // console.log(requestBody,anonymousStats,perfResultStats);
+
     this.props.updateProgress({ showProgress : true });
-    dataFetch('/api/user/prefs', {
-      credentials : 'same-origin',
-      method : 'POST',
-      credentials : 'include',
-      headers : { 'Content-Type' : 'application/x-www-form-urlencoded;charset=UTF-8', },
-      body : params,
-    }, (result) => {
-      this.props.updateProgress({ showProgress : false });
-      if (typeof result !== 'undefined') {
-        this.props.enqueueSnackbar(msg, { variant : !val
-          ? 'success'
-          : 'info',
-        autoHideDuration : 4000,
-        action : (key) => (
-          <IconButton
-            key="close"
-            aria-label="Close"
-            color="inherit"
-            onClick={() => self.props.closeSnackbar(key)}
-          >
-            <CloseIcon />
-          </IconButton>
-        ), });
-      }
-    }, self.handleError('There was an error sending your preference'));
+    dataFetch(
+      ctxUrl('/api/user/prefs', this.props.selectedK8sContexts), {
+        credentials : 'include',
+        method : 'POST',
+        headers : { 'Content-Type' : 'application/json;charset=UTF-8', },
+        body : requestBody,
+      }, (result) => {
+        this.props.updateProgress({ showProgress : false });
+        if (typeof result !== 'undefined') {
+          this.props.enqueueSnackbar(msg, { variant : val
+            ? 'success'
+            : 'info',
+          autoHideDuration : 4000,
+          action : (key) => (
+            <IconButton
+              key="close"
+              aria-label="Close"
+              color="inherit"
+              onClick={() => self.props.closeSnackbar(key)}
+            >
+              <CloseIcon style={iconMedium} />
+            </IconButton>
+          ), });
+        }
+      }, self.handleError('There was an error sending your preference'));
   }
 
   handleTabValChange = (event, newVal) => {
@@ -186,30 +219,42 @@ class UserPreference extends React.Component {
 
   componentDidMount = () => {
     dataFetch(
-      "/api/provider/capabilities",
-      { credentials : "same-origin",
+      "/api/user/prefs",
+      {
         method : "GET",
-        credentials : "include", },
+        credentials : "include",
+      },
       (result) => {
         if (result) {
           this.setState({
-            userPrefs : ExtensionPointSchemaValidator("user_prefs")(result?.extensions?.user_prefs),
-            providerType : result?.provider_type
+            extensionPreferences : result?.usersExtensionPreferences,
+            catalogContent : result?.usersExtensionPreferences?.catalogContent
           })
         }
       },
       err => console.error(err)
     )
+
+  }
+
+  componentDidUpdate() {
+    const { capabilitiesRegistry } = this.props;
+    if (capabilitiesRegistry && !this.state.capabilitiesLoaded) {
+      this.setState({
+        capabilitiesLoaded : true, // to prevent re-compute
+        userPrefs : ExtensionPointSchemaValidator("user_prefs")(capabilitiesRegistry?.extensions?.user_prefs),
+        providerType : capabilitiesRegistry?.provider_type,
+      })
+    }
   }
 
   render() {
     const {
-      anonymousStats, perfResultStats, tabVal, startOnZoom, userPrefs, providerType
+      anonymousStats, perfResultStats, tabVal, userPrefs, providerType, catalogContent
     } = this.state;
     const { classes } = this.props;
 
-    const mainIconScale = 'grow-10';
-    const handleToggle = this.handleToggle('startOnZoom');
+    // const mainIconScale = 'grow-10';
 
     return (
       <NoSsr>
@@ -226,7 +271,7 @@ class UserPreference extends React.Component {
               <Tab
                 className={classes.tab}
                 icon={
-                  <SettingsCellIcon />
+                  <SettingsCellIcon style={iconMedium} />
                 }
                 label={<span className={classes.tabLabel}>General</span>}
               />
@@ -235,7 +280,7 @@ class UserPreference extends React.Component {
               <Tab
                 className={classes.tab}
                 icon={
-                  <FontAwesomeIcon icon={faTachometerAlt} transform={mainIconScale} fixedWidth />
+                  <FontAwesomeIcon icon={faTachometerAlt} style={iconMedium}/>
                 }
                 label={<span className={classes.tabLabel}>Performance</span>}
               />
@@ -246,7 +291,7 @@ class UserPreference extends React.Component {
                 <Tab
                   className={classes.tab}
                   icon={
-                    <SettingsRemoteIcon />
+                    <SettingsRemoteIcon style={iconMedium} />
                   }
                   label={<span className={classes.tabLabel}>Remote Provider</span>}
                 />
@@ -254,8 +299,32 @@ class UserPreference extends React.Component {
             }
           </Tabs>
         </Paper>
-        <Paper className={classes.root}>
+        <Paper className={classes.statsWrapper}>
           {tabVal == 0 &&
+          <>
+            <div className={classes.formContainer}>
+              <FormControl component="fieldset" className={classes.formGrp}>
+                <FormLabel component="legend" className={classes.formLegend}>Extensions</FormLabel>
+                <FormGroup>
+                  <FormControlLabel
+                    key="CatalogContentPreference"
+                    control={(
+                      <Switch
+                        checked={catalogContent}
+                        onChange={this.handleCatalogContentToggle}
+                        color="primary"
+                        classes={{ switchBase : classes.switchBase,
+                          track : classes.track,
+                          checked : classes.checked, }}
+                        data-cy="CatalogContentPreference"
+                      />
+                    )}
+                    labelPlacement="end"
+                    label="Meshery Catalog Content"
+                  />
+                </FormGroup>
+              </FormControl>
+            </div>
             <div className={classes.formContainer}>
               <FormControl component="fieldset" className={classes.formGrp}>
                 <FormLabel component="legend" className={classes.formLegend}>Analytics and Improvement Program</FormLabel>
@@ -295,12 +364,13 @@ class UserPreference extends React.Component {
                 </FormGroup>
               </FormControl>
             </div>
+          </>
           }
           {tabVal === 1 &&
             <MesherySettingsPerformanceComponent />
           }
           {tabVal == 2 && userPrefs && providerType != 'local' &&
-            <ExtensionSandbox type="user_prefs" Extension={(url) => RemoteUserPref({ startOnZoom, handleToggle, url })} />
+            <ExtensionSandbox type="user_prefs" Extension={(url) => RemoteComponent({ url })} />
           }
         </Paper>
       </NoSsr>
@@ -309,9 +379,21 @@ class UserPreference extends React.Component {
 }
 
 const mapDispatchToProps = (dispatch) => ({ updateUser : bindActionCreators(updateUser, dispatch),
-  updateProgress : bindActionCreators(updateProgress, dispatch), });
+  updateProgress : bindActionCreators(updateProgress, dispatch), toggleCatalogContent : bindActionCreators(toggleCatalogContent, dispatch) });
+
+const mapStateToProps = (state) => {
+  const selectedK8sContexts = state.get('selectedK8sContexts');
+  const catalogVisibility = state.get('catalogVisibility');
+  const capabilitiesRegistry = state.get("capabilitiesRegistry")
+  return {
+    selectedK8sContexts,
+    catalogVisibility,
+    capabilitiesRegistry
+  };
+};
+
 
 export default withStyles(styles)(connect(
-  null,
+  mapStateToProps,
   mapDispatchToProps,
 )(withRouter(withSnackbar(UserPreference))));

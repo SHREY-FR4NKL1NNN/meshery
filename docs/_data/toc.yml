@@ -6,15 +6,17 @@
   links:
     - title: Community
       url: project/community
-    - title: Contributing
+    - title: Contributing ↆ
       url: project/contributing
       children:
-        - title: Design and Code Conventions
-          url: project/contributing/contributing-guide
+        - title: Build & Release (CI)
+          url: project/contributing/build-and-release
         - title: Meshery Adapters
           url: project/contributing/contributing-adapters
         - title: Meshery CLI
           url: project/contributing/contributing-cli
+        - title: "- CLI Design and Code Conventions"
+          url: project/contributing/contributing-cli-guide
         - title: Meshery Docs
           url: project/contributing/contributing-docs
         - title: Meshery Errors
@@ -23,21 +25,23 @@
           url: project/contributing/contributing-server
         - title: Meshery UI
           url: project/contributing/contributing-ui
+        - title: End-to-End Testing
+          url: project/contributing/contributing-cypress
     - title: Releases
       url: project/releases
-    - title: Build & Release (CI)
-      url: project/build-and-release
     - title: Vulnerabilities
       url: project/security-vulnerabilities
     - title: FAQ
       url: project/faq
-    - title: Supported Platforms
+    - title: Supported Platforms ↆ
       url: installation/platforms
       children:
         - title: AKS
           url: installation/platforms/aks
         - title: Docker
           url: installation/platforms/docker
+        - title: Docker Extension
+          url: installation/platforms/docker-extension
         - title: EKS
           url: installation/platforms/eks
         - title: GKE
@@ -46,6 +50,8 @@
           url: installation/platforms/kind
         - title: Kubernetes
           url: installation/platforms/kubernetes
+        - title: KubeSphere
+          url: installation/platforms/kubesphere
         - title: Minikube
           url: installation/platforms/minikube
         - title: Windows
@@ -75,8 +81,10 @@
   links:
     - title: App Mesh
       url: service-meshes/adapters/app-mesh
-    - title: Citrix Service Mesh
-      url: service-meshes/adapters/cpx
+    # - title: Citrix Service Mesh
+    #   url: service-meshes/adapters/cpx
+    - title: Cilium Service Mesh
+      url: service-meshes/adapters/cilium
     - title: Consul
       url: service-meshes/adapters/consul
     - title: Istio
@@ -89,8 +97,6 @@
       url: service-meshes/adapters/nsm
     - title: NGINX Service Mesh
       url: service-meshes/adapters/nginx-sm
-    - title: Octarine
-      url: service-meshes/adapters/octarine
     - title: Open Service Mesh
       url: service-meshes/adapters/osm
     - title: Tanzu
@@ -110,11 +116,11 @@
       url: guides/troubleshooting
     - title: Upgrading Meshery
       url: guides/upgrade
-    - title: Using mesheryctl
+    - title: Using mesheryctl ↆ
       url: guides/mesheryctl
       children:
         - title: Using mesheryctl
-          url: guides/mesheryctl/using-mesheryctl
+          url: guides/mesheryctl/working-with-mesheryctl
         - title: Configure autocompletion for mesheryctl
           url: guides/mesheryctl/configuring-autocompletion-for-mesheryctl
         - title: Authenticate via Meshery CLI
@@ -122,7 +128,7 @@
         - title: Upgrading Meshery CLI
           url: guides/upgrade#upgrading-meshery-cli
         - title: Running system checks using Meshery CLI
-          url: guides/mesheryctl/running-system-checks-using-cli
+          url: guides/mesheryctl/running-system-checks-using-mesheryctl
     - title: Using Multiple Meshery Adapters
       url: guides/multiple-adapters
 - title: 🛠 Extensibility
@@ -137,11 +143,11 @@
     - title: "REST & GraphQL APIs"
       url: extensibility/api
     - title: "UI Plugins"
-      url: extensibility/ui      
+      url: extensibility/ui
 - title: 📖 Reference
   url: reference
   links:
-    - title: mesheryctl Commands
+    - title: Meshery CLI
       url: reference/mesheryctl
     - title: Error Codes
       url: reference/error-codes
@@ -149,3 +155,4 @@
       url: reference/graphql-apis
     - title: "REST API Reference"
       url: reference/rest-apis
+

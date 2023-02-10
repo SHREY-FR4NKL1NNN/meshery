@@ -8,19 +8,19 @@ display-title: "false"
 {% assign sorted_pages = site.pages | sort: "name" | alphabetical %}
 
 <div style="display: block; text-align: center; margin-bottom: 30px;">
-    <a href="https://layer5.io/meshery">
-    <img style="width: calc(100% / 3.2); " 
-         src="/assets/img/meshery/meshery-logo-light-text.svg" />
+     <a href="https://layer5.io/meshery" class="svg-lg">
+        {% include svg/meshery-logo.html %}
     </a>
 </div>
-<p style="margin:auto;padding:1rem;font-size: 1.25rem;">Meshery is the open source, service mesh management plane that enables the adoption, operation, and management of any service mesh and their workloads.</p>
+<p style="margin:auto;padding:1.6rem">Meshery is the open source, cloud native management plane that enables the adoption, operation, and management of Kubernetes, any service mesh, and their workloads.</p>
 
-<div class="wrapper" style="text-align: left;">
+<p style="padding:1.6rem;">Follow on <a href="https://twitter.com/mesheryio">Twitter</a> or subscribe to our <a href="https://meshery.io/subscribe">newsletter</a> for the latest updates. Get support on our <a href="https://discuss.layer5.io">forum</a>. Join our <a href="https://slack.layer5.io">Slack</a> to interact directly with other users and contributors.</p>
 
+<div class="flex flex-col--2"  style="text-align: left; padding:1.6rem ;--col-gap:1rem">
   <!-- QUICK START -->
-  <div>
+  <div class="section">
     <a href="{{ site.baseurl }}/installation/quick-start">
-        <div class="overview">Quick&nbsp;Start</div>
+        <div class="btn-primary">Quick&nbsp;Start</div>
     </a>
     <h6>Getting Started</h6>
     <ul>
@@ -40,9 +40,9 @@ display-title: "false"
   </div>
   
   <!-- CONCEPTS -->
-  <div>
+  <div class="section">
     <a href="{{ site.baseurl }}/concepts">
-        <div class="overview">Concepts</div>
+        <div class="btn-primary">Concepts</div>
     </a>
     <h6><a href="{{ site.baseurl }}/concepts" class="text-black section-title">Concepts</a></h6>
     <ul>
@@ -56,14 +56,14 @@ display-title: "false"
   </div>
 
 </div>
-<div class="wrapper" style="text-align: left;">
+<div class="flex flex-col--2"  style="text-align: left; padding:1.6rem ;--col-gap:1rem">
 
   <!-- FUNCTIONALITY -->
-  <div>
+  <div class="section">
     <a href="{{ site.baseurl }}/functionality">
-        <div class="overview">Functionality</div>
+        <div class="btn-primary">Functionality</div>
     </a>
-    <h6><a href="{{ site.baseurl }}/functionality" class="text-black section-title">Service Mesh Management</a></h6>
+    <h6><a href="{{ site.baseurl }}/functionality" class="text-black section-title">Cloud Native Management</a></h6>
     <ul>
       {% for item in sorted_pages %}
       {% if item.type=="functionality" and item.list!="exclude" and item.language !="es" -%}
@@ -82,16 +82,16 @@ display-title: "false"
       {% endfor %}
       {% for adapter in site.adapters -%}
       {% if adapter.project_status -%}
-        <li><img src="{{ adapter.image }}" style="width:20px" /> <a href="{{ site.baseurl }}{{ adapter.url }}">{{ adapter.name }}</a></li>
+        <li><img src="{{ adapter.image }}" style="width:20px;height:20px; transform:translateY(5px)"/> <a href="{{ site.baseurl }}{{ adapter.url }}">{{ adapter.name }}</a></li>
       {% endif -%}
       {% endfor %}
     </ul>
   </div>
 
   <!-- GUIDES -->
-  <div>
+  <div class="section">
     <a href="{{ site.baseurl }}/guides">
-        <div class="overview">Guides and Reference</div>
+        <div class="btn-primary">Guides</div>
     </a>
     <h6><a href="{{ site.baseurl }}/guides" class="text-black section-title">Guides</a></h6>
     <ul>

@@ -1,3 +1,4 @@
+import React from "react";
 import IconButton from '@material-ui/core/IconButton';
 import CloseIcon from '@material-ui/icons/Close';
 import { connect } from 'react-redux';
@@ -9,10 +10,11 @@ import {
   Divider,
   Typography,
   Tabs,
-  Tab
+  Tab,
+  ClickAwayListener
 } from '@material-ui/core';
 import BellIcon from '@material-ui/icons/Notifications';
-import DoneAllIcon from '@material-ui/icons/DoneAll';
+import ClearIcon from '@material-ui/icons/Clear';
 import ErrorIcon from '@material-ui/icons/Error';
 import { withStyles } from '@material-ui/core/styles';
 import amber from '@material-ui/core/colors/amber';
@@ -22,12 +24,15 @@ import MesheryEventViewer from './MesheryEventViewer';
 // import { updateSMIResults } from '../lib/store';
 import dataFetch from '../lib/data-fetch';
 import { withSnackbar } from 'notistack'
+import { bindActionCreators } from "redux";
+import { updateEvents } from "../lib/store";
+import { iconMedium } from "../css/icons.styles";
 
 const styles = (theme) => ({
   sidelist : { width : 450, },
   notificationButton : { height : '100%', },
   notificationDrawer : {
-    backgroundColor : '#FFFFFF',
+    backgroundColor : theme.palette.secondary.sideBar,
     display : 'flex',
     flexDirection : 'column',
     justifyContent : 'space-between'
@@ -44,27 +49,37 @@ const styles = (theme) => ({
   notificationTitle : { textAlign : 'left', },
   notifSelector : { display : 'flex', },
   icon : { fontSize : 20, },
-  iconVariant : { opacity : 0.9,
+  iconVariant : {
+    opacity : 0.9,
     marginRight : theme.spacing(1),
-    marginTop : theme.spacing(1) * 3 / 4, },
+    marginTop : theme.spacing(1) * 3 / 4,
+  },
   error : { backgroundColor : theme.palette.error.dark, },
   info : { backgroundColor : theme.palette.primary.dark, },
   warning : { backgroundColor : amber[700], },
-  message : { display : 'flex',
+  message : {
+    display : 'flex',
     // alignItems: 'center',
   },
-  clearAllButton : { display : 'flex',
-    justifyContent : 'flex-end' },
-  HeaderItem : { fontSize : '1.6rem',
-    height : '1.6rem',
-    width : '1.6rem', },
+  clearAllButton : {
+    display : 'flex',
+    justifyContent : 'flex-end'
+  },
   drawerButton : {
     padding : '0.45rem',
     margin : '0.2rem',
     backgroundColor : theme.palette.secondary.dark,
     color : '#FFFFFF',
-    "&:hover" : { backgroundColor : '#FFFFFF',
-      color : theme.palette.secondary.dark }
+    "&:hover" : {
+      backgroundColor : '#FFFFFF',
+      color : theme.palette.secondary.dark
+    }
+  },
+  fullView : {
+    right : 0,
+  },
+  peekView : {
+    right : "-26.1rem"
   }
 });
 
@@ -118,38 +133,29 @@ function getNotificationCount(events) {
  * icons based on the "type" prop
  * @param {{ type: string,className: string }} props
  */
-function NotificationIcon ({ type, className }) {
-  if (type === "error") return <ErrorIcon className={className}/>
+function NotificationIcon({ type, className }) {
+  if (type === "error") return <ErrorIcon id="error-icon" className={className} />
 
-  return <BellIcon className={className}/>
+  return <BellIcon className={className} />
 }
 
 class MesheryNotification extends React.Component {
   state = {
-    events : [],
     open : false,
     dialogShow : false,
-    k8sConfig : { inClusterConfig : false,
-      clusterConfigured : false,
-      contextName : '', },
-    meshAdapters : [],
-    createStream : false,
     displayEventType : "*",
     tabValue : 0,
+    anchorEl : false,
+    showFullNotificationCenter : false,
   }
 
   handleToggle = () => {
-    this.setState((state) => ({ open : !state.open }));
+    this.setState({ showFullNotificationCenter : !this.state.showFullNotificationCenter })
   };
 
-  handleClose() {
-    const self = this;
-    return (event) => {
-      if (self.anchorEl.contains(event.target)) {
-        return;
-      }
-      self.setState({ open : false });
-    };
+  handleClose = () => {
+    this.setState({ anchorEl : false });
+    this.setState({ showFullNotificationCenter : false })
   }
 
   /**
@@ -159,7 +165,8 @@ class MesheryNotification extends React.Component {
    */
   notificationDispatcher(type, message) {
     const self = this;
-    self.props.enqueueSnackbar(message, { variant : eventTypes[type]?.type,
+    self.props.enqueueSnackbar(message, {
+      variant : eventTypes[type]?.type,
       autoHideDuration : 5000,
       action : (key) => (
         <IconButton
@@ -168,29 +175,14 @@ class MesheryNotification extends React.Component {
           color="inherit"
           onClick={() => self.props.closeSnackbar(key)}
         >
-          <CloseIcon />
+          <CloseIcon style={iconMedium} />
         </IconButton>
-      ), });
+      ),
+    });
   }
 
-  static getDerivedStateFromProps(props, state) {
-    if (JSON.stringify(props.k8sConfig) !== JSON.stringify(state.k8sConfig)
-        || JSON.stringify(props.meshAdapters) !== JSON.stringify(state.meshAdapters)) {
-      return { createStream : true,
-        k8sConfig : props.k8sConfig,
-        meshAdapters : props.meshAdapters, };
-    }
-    return null;
-  }
-
-  componentDidUpdate() {
-    const { createStream, k8sConfig, meshAdapters } = this.state;
-    if (!k8sConfig.clusterConfigured || meshAdapters.length === 0) {
-      this.closeEventStream();
-    }
-    if (createStream && k8sConfig.clusterConfigured && typeof meshAdapters !== 'undefined' && meshAdapters.length > 0) {
-      this.startEventStream();
-    }
+  componentDidMount() {
+    this.startEventStream();
   }
 
   async startEventStream() {
@@ -198,19 +190,16 @@ class MesheryNotification extends React.Component {
     this.eventStream = new EventSource('/api/events');
     this.eventStream.onmessage = this.handleEvents();
     this.eventStream.onerror = this.handleError();
-    this.setState({ createStream : false });
   }
 
   handleEvents() {
     const self = this;
     return (e) => {
-      const { events } = this.state;
+      const { events, updateEvents } = this.props;
       const data = JSON.parse(e.data);
       // set null event field as success
       data.event_type = data.event_type || 0
 
-      // Add the event to the state
-      events.push(data);
 
       // Dispatch the notification
       self.notificationDispatcher(data.event_type, data.summary)
@@ -219,7 +208,7 @@ class MesheryNotification extends React.Component {
       //   self.props.updateSMIResults({smi_result: data,});
       //   console.log("HandleEvents",{smi_result: data,});
       // }
-      self.setState({ events });
+      updateEvents({ events : [...events, data] })
     };
   }
 
@@ -246,11 +235,12 @@ class MesheryNotification extends React.Component {
   }
 
   deleteEvent = (ind) => () => {
-    const { events } = this.state;
+    const { events, updateEvents } = this.props;
     if (events[ind]) {
       events.splice(ind, 1);
     }
-    this.setState({ events, dialogShow : false });
+    updateEvents({ events : events })
+    this.setState({ dialogShow : false });
   }
 
   handleDialogClose = () => {
@@ -259,8 +249,10 @@ class MesheryNotification extends React.Component {
 
   handleClearAllNotifications() {
     const self = this;
+    const { updateEvents } = this.props;
     return () => {
-      self.setState({ events : [], open : false });
+      updateEvents({ events : [] })
+      self.setState({ open : false });
     };
   }
 
@@ -275,23 +267,34 @@ class MesheryNotification extends React.Component {
   }
 
   handleBellButtonClick = () => {
-    this.setState({ tabValue : 0,
-      displayEventType : '*' })
+    this.setState({
+      tabValue : 0,
+      displayEventType : '*'
+    })
   }
 
   render() {
-    const { classes } = this.props;
-    const { open, events } = this.state;
+    const { classes, events } = this.props;
+    const { anchorEl, showFullNotificationCenter } = this.state;
     const self = this;
+    let open = Boolean(anchorEl);
+    if (showFullNotificationCenter) {
+      open = showFullNotificationCenter;
+    }
 
-    let toolTipMsg = `There are ${events.length} events`;
-    switch (events.length) {
-      case 0:
-        toolTipMsg = 'There are no events';
-        break;
-      case 1:
-        toolTipMsg = 'There is 1 event';
-        break;
+    let toolTipMsg;
+    if (typeof events?.length !== 'undefined') {
+      toolTipMsg = `There are ${events.length} events`;
+      switch (events?.length) {
+        case 0:
+          toolTipMsg = 'There are no events';
+          break;
+        case 1:
+          toolTipMsg = 'There is 1 event';
+          break;
+      }
+    } else { // takes care of case when (typeof events.length === undefined)
+      toolTipMsg = 'There are no events';
     }
     let badgeColorVariant = 'default';
     events.forEach((eev) => {
@@ -305,97 +308,130 @@ class MesheryNotification extends React.Component {
         <NoSsr>
           <Tooltip title={toolTipMsg}>
             <IconButton
+              id="notification-button"
               className={classes.notificationButton}
               buttonRef={(node) => {
                 this.anchorEl = node;
               }}
               color="inherit"
               onClick={this.handleToggle}
+
+              onMouseOver={(e) => {
+                e.preventDefault();
+                this.setState({ anchorEl : true })
+              }}
+
+              onMouseLeave={(e) => {
+                e.preventDefault();
+                this.setState({ anchorEl : false })
+              }}
             >
-              <Badge badgeContent={getNotificationCount(events)} color={badgeColorVariant}>
-                <NotificationIcon className={classes.HeaderItem} type={badgeColorVariant} />
+              <Badge id="notification-badge" badgeContent={getNotificationCount(events)} color={badgeColorVariant}>
+                <NotificationIcon  style={iconMedium}  type={badgeColorVariant} />
               </Badge>
             </IconButton>
           </Tooltip>
 
-          <Drawer
-            anchor="right"
-            open={open}
-            onClose={this.handleClose()}
-            classes={{ paper : classes.notificationDrawer, }}
-          >
-            <div>
-              <div className={classes.sidelist}>
-                <div className={classes.listTop}>
-                  <div className={classes.notifSelector}>
-                    <Tooltip title="Show all notifications">
-                      <IconButton
-                        color="inherit"
-                        className={classes.drawerButton}
-                        onClick={this.handleBellButtonClick}
-                      >
-                        <BellIcon className={classes.HeaderItem}/>
-                      </IconButton>
-                    </Tooltip>
-                  </div>
-                  <div className={classes.notificationTitle}>
-                    <Typography variant="subtitle1" align="center">
-                      Notifications
-                    </Typography>
-                  </div>
-                  <div className={classes.clearAllButton}>
-                    <Tooltip title="Clear all notifications">
-                      <IconButton
-                        color="inherit"
-                        className={classes.drawerButton}
-                        onClick={this.handleClearAllNotifications()}
-                      >
-                        <DoneAllIcon className={classes.HeaderItem}/>
-                      </IconButton>
-                    </Tooltip>
+          <ClickAwayListener onClickAway={(e) => {
+            if (e.target.className.baseVal !== "" && e.target.className.baseVal !== "MuiSvgIcon-root" &&
+              ((typeof e.target.className === "string")? !e.target.className?.includes("MesheryNotification"): null)) {
+              this.handleClose();
+            }
+          }}>
+            <Drawer
+              anchor="right"
+              variant="persistent"
+              open={open}
+              classes={{
+                paper : classes.notificationDrawer,
+                paperAnchorRight : showFullNotificationCenter? classes.fullView : classes.peekView,
+              }}
+            >
+              <div>
+                <div>
+                  <div className={classes.sidelist}>
+                    <div className={classes.listTop}>
+                      <div className={classes.notifSelector}>
+                        <Tooltip title="Show all notifications">
+                          <IconButton
+                            color="inherit"
+                            className={classes.drawerButton}
+                            onClick={this.handleBellButtonClick}
+                          >
+                            <BellIcon  style={iconMedium}  />
+                          </IconButton>
+                        </Tooltip>
+                      </div>
+                      <div className={classes.notificationTitle}>
+                        <Typography variant="subtitle1" align="center">
+                            Notifications
+                        </Typography>
+                      </div>
+                      <div
+                        className={classes.clearAllButton}>
+                        <Tooltip title="Clear all notifications">
+                          <IconButton
+                            color="inherit"
+                            className={classes.drawerButton}
+                            onClick={this.handleClearAllNotifications()}
+                          >
+                            <ClearIcon width={'1em'} height={'1em'} fill={'white'}/>
+                          </IconButton>
+                        </Tooltip>
+                      </div>
+                    </div>
+                    <Divider light />
+                    <Tabs
+                      value={this.state.tabValue}
+                      onChange={this.handleTabChange}
+                      indicatorColor="primary"
+                      textColor="primary"
+                      variant="fullWidth"
+                    >
+                      <Tab label="All" onClick={this.handleNotifFiltering('*')} style={{ minWidth : "15%" }} />
+                      <Tab label="Error" onClick={this.handleNotifFiltering('error')} style={{ minWidth : "15%" }} />
+                      <Tab label="Warning" onClick={this.handleNotifFiltering('warning')} style={{ minWidth : "15%" }} />
+                      <Tab label="Success" onClick={this.handleNotifFiltering('success')} style={{ minWidth : "15%" }} />
+                    </Tabs>
+                    {getNotifications(this.props.events, this.state.displayEventType).map((event, ind) => (
+                      <MesheryEventViewer
+                        key={ind}
+                        eventVariant={event.event_type}
+                        eventSummary={event.summary}
+                        deleteEvent={self.deleteEvent(ind)}
+                        eventDetails={event.details || "Details Unavailable"}
+                        eventCause={event.probable_cause}
+                        eventRemediation={event.suggested_remediation}
+                        eventErrorCode={event.error_code}
+                        componentType={event.component}
+                        componentName={event.component_name}
+                      />
+                    ))}
                   </div>
                 </div>
-                <Divider light />
-                <Tabs
-                  value={this.state.tabValue}
-                  onChange={this.handleTabChange}
-                  indicatorColor="primary"
-                  textColor="primary"
-                  variant="fullWidth"
-                >
-                  <Tab label="All" onClick={this.handleNotifFiltering('*')} style={{ minWidth : "15%" }}/>
-                  <Tab label="Error"  onClick={this.handleNotifFiltering('error')} style={{ minWidth : "15%" }}/>
-                  <Tab label="Warning" onClick={this.handleNotifFiltering('warning')} style={{ minWidth : "15%" }}/>
-                  <Tab label="Success" onClick={this.handleNotifFiltering('success')} style={{ minWidth : "15%" }}/>
-                </Tabs>
-                {getNotifications(events, this.state.displayEventType).map((event, ind) => (
-                  <MesheryEventViewer
-                    eventVariant={event.event_type}
-                    eventSummary={event.summary}
-                    deleteEvent={self.deleteEvent(ind)}
-                    eventDetails={event.details || "Details Unavailable"}
-                  />
-                ))}
               </div>
-            </div>
-          </Drawer>
+            </Drawer>
+          </ClickAwayListener>
         </NoSsr>
       </div>
     );
   }
 }
 
+const mapDispatchToProps = (dispatch) => ({
+  updateEvents : bindActionCreators(updateEvents, dispatch)
+})
+
 // const mapDispatchToProps = (dispatch) => ({
 //   updateSMIResults: bindActionCreators(updateSMIResults, dispatch),
 // });
 
 const mapStateToProps = (state) => {
-  const k8sConfig = state.get('k8sConfig').toJS();
-  const meshAdapters = state.get('meshAdapters').toJS();
-  return { k8sConfig, meshAdapters };
+  const events = state.get("events");
+  return { events };
 };
 
 export default withStyles(styles)(connect(
   mapStateToProps,
-  null,
+  mapDispatchToProps,
 )(withSnackbar(MesheryNotification)));

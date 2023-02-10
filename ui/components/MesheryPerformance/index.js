@@ -42,9 +42,10 @@ import {
 import dataFetch from "../../lib/data-fetch";
 import MesheryChart from "../MesheryChart";
 import LoadTestTimerDialog from "../load-test-timer-dialog";
-import GrafanaCustomCharts from "../GrafanaCustomCharts";
+import GrafanaCustomCharts from "../telemetry/grafana/GrafanaCustomCharts";
 import { durationOptions } from "../../lib/prePopulatedOptions";
 import fetchControlPlanes from "../graphql/queries/ControlPlanesQuery";
+import { ctxUrl, getK8sClusterIdsFromCtxId } from "../../utils/multi-ctx";
 
 // =============================== HELPER FUNCTIONS ===========================
 
@@ -116,7 +117,7 @@ const infoloadGenerators = (
   </>
 );
 const styles = (theme) => ({
-  root : { padding : theme.spacing(10), position : "relative" },
+  wrapperClss : { padding : theme.spacing(10), position : "relative" },
   buttons : { display : "flex", justifyContent : "flex-end" },
   button : { marginTop : theme.spacing(3), marginLeft : theme.spacing(1) },
   expansionPanel : { boxShadow : "none", border : "1px solid rgb(196,196,196)" },
@@ -328,7 +329,7 @@ class MesheryPerformanceComponent extends React.Component {
           });
 
           if (generateNotif) {
-            this.props.enqueueSnackbar("Performance Profile Successfully Created!", {
+            this.props.enqueueSnackbar("Performance Profile Created!", {
               variant : "success",
               autoHideDuration : 2000,
               action : (key) => (
@@ -408,7 +409,9 @@ class MesheryPerformanceComponent extends React.Component {
       .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(data[key])}`)
       .join("&");
     console.log(params);
-    this.startEventStream(`/api/user/performance/profiles/${id}/run?${params}`);
+
+    const runURL = ctxUrl(`/api/user/performance/profiles/${id}/run`, this.props?.selectedK8sContexts);
+    this.startEventStream(`${runURL}${this.props?.selectedK8sContexts?.length > 0 ? "&" : "?"}${params}`);
     this.setState({ blockRunTest : true }); // to block the button
   };
 
@@ -417,7 +420,7 @@ class MesheryPerformanceComponent extends React.Component {
     return (result) => {
       const { testName, meshName, url, qps, c, t, loadGenerator } = this.state;
       if (typeof result !== "undefined" && typeof result.runner_results !== "undefined") {
-        self.props.enqueueSnackbar("Successfully fetched the data.", {
+        self.props.enqueueSnackbar("fetched the data.", {
           variant : "success",
           autoHideDuration : 2000,
           action : (key) => (
@@ -452,7 +455,7 @@ class MesheryPerformanceComponent extends React.Component {
     this.eventStream.onerror = this.handleError(
       "Connection to the server got disconnected. Load test might be running in the background. Please check the results page in a few."
     );
-    this.props.enqueueSnackbar("Load test has been successfully submitted", {
+    this.props.enqueueSnackbar("Load test has been submitted", {
       variant : "info",
       autoHideDuration : 1000,
       action : (key) => (
@@ -485,7 +488,7 @@ class MesheryPerformanceComponent extends React.Component {
           }
           break;
         case "error":
-          self.handleError("Load test did not run successfully with msg")(data.message);
+          self.handleError("Load test did not run with msg")(data.message);
           break;
         case "success":
           self.handleSuccess()(data.result);
@@ -512,7 +515,7 @@ class MesheryPerformanceComponent extends React.Component {
 
   getLoadTestPrefs = () => {
     dataFetch(
-      "/api/user/prefs",
+      ctxUrl("/api/user/prefs", this.props?.selectedK8sContexts),
       { credentials : "same-origin", method : "GET" },
       (result) => {
         if (typeof result !== "undefined") {
@@ -524,7 +527,7 @@ class MesheryPerformanceComponent extends React.Component {
           });
         }
       },
-      () => {}
+      () => { }
     ); //error is already captured from the handler, also we have a redux-store for same & hence it's not needed here.
   };
 
@@ -563,6 +566,11 @@ class MesheryPerformanceComponent extends React.Component {
     );
   };
 
+
+  getK8sClusterIds = () => {
+    return getK8sClusterIdsFromCtxId(this.props.selectedK8sContexts, this.props.k8sconfig)
+  }
+
   scanForMeshes = () => {
     const self = this;
 
@@ -574,7 +582,7 @@ class MesheryPerformanceComponent extends React.Component {
      * component of all of the service meshes supported by meshsync v2
      */
 
-    const ALL_MESH = {};
+    const ALL_MESH = { type : "ALL_MESH", k8sClusterIDs : this.getK8sClusterIds() };
 
     fetchControlPlanes(ALL_MESH).subscribe({
       next : (res) => {
@@ -747,7 +755,7 @@ class MesheryPerformanceComponent extends React.Component {
     return (
       <NoSsr>
         <React.Fragment>
-          <div className={classes.root}>
+          <div className={classes.wrapperClss} style={this.props.style || {}}>
             <Grid container spacing={1}>
               <Grid item xs={12} md={6}>
                 <Tooltip title="If a profile name is not provided, a random one will be generated for you.">
@@ -948,8 +956,8 @@ class MesheryPerformanceComponent extends React.Component {
                     onChange={this.handleChange("loadGenerator")}
                     row
                   >
-                    {loadGenerators.map((lg) => (
-                      <FormControlLabel value={lg} control={<Radio color="primary" />} label={lg} />
+                    {loadGenerators.map((lg, index) => (
+                      <FormControlLabel key={index} value={lg} control={<Radio color="primary" />} label={lg} />
                     ))}
                   </RadioGroup>
                 </FormControl>
@@ -1051,13 +1059,16 @@ const mapDispatchToProps = (dispatch) => ({
 const mapStateToProps = (state) => {
   const grafana = state.get("grafana").toJS();
   const prometheus = state.get("prometheus").toJS();
-  const k8sConfig = state.get("k8sConfig").toJS();
+  const k8sConfig = state.get("k8sConfig");
   const staticPrometheusBoardConfig = state.get("staticPrometheusBoardConfig").toJS();
+  const selectedK8sContexts = state.get('selectedK8sContexts');
+
   return {
     grafana,
     prometheus,
     staticPrometheusBoardConfig,
     k8sConfig,
+    selectedK8sContexts,
   };
 };
 

@@ -1,13 +1,23 @@
 //@ts-check
 import React from "react";
 import { Typography, Button } from "@material-ui/core";
-import AddIcon from "@material-ui/icons/Add";
-import GrafanaCustomCharts from "./GrafanaCustomCharts";
+import AddIcon from "@material-ui/icons/AddCircleOutline";
+import GrafanaCustomCharts from "./telemetry/grafana/GrafanaCustomCharts";
+import { makeStyles, } from "@material-ui/core/styles";
+import { iconMedium } from "../css/icons.styles";
+
+const useStyles = makeStyles(() => ({
+  addIcon : {
+    paddingRight : ".35rem",
+  },
+}));
 
 function MesheryMetrics({
   boardConfigs = [], grafanaURL = "", grafanaAPIKey = "", handleGrafanaChartAddition
 }) {
+  const classes = useStyles();
   if (boardConfigs?.length)
+
     return (
       <>
         <Typography
@@ -47,7 +57,7 @@ function MesheryMetrics({
         size="large"
         onClick={() => handleGrafanaChartAddition()}
       >
-        <AddIcon />
+        <AddIcon className={classes.addIcon}  style={iconMedium}  />
         Configure Service Mesh Metrics
       </Button>
     </div>

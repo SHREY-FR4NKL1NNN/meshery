@@ -1,6 +1,6 @@
 
 import {
-  Accordion, AccordionDetails, AccordionSummary, AppBar, ButtonGroup, CircularProgress, Divider, FormControl, Grid, IconButton, makeStyles, MenuItem, Paper, Select, TextField, Toolbar, Tooltip, Typography,
+  Accordion, AccordionDetails, AccordionSummary, AppBar, ButtonGroup, CircularProgress, Divider, FormControl, Grid, IconButton, MenuItem, Paper, TextField, Toolbar, Tooltip, Typography, withStyles,
 } from "@material-ui/core";
 import DeleteIcon from "@material-ui/icons/Delete";
 import ExpandMoreIcon from "@material-ui/icons/ExpandMore";
@@ -10,25 +10,27 @@ import SaveIcon from '@material-ui/icons/Save';
 import { Autocomplete } from '@material-ui/lab';
 import jsYaml from "js-yaml";
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { trueRandom } from "../../lib/trueRandom";
 import { SchemaContext } from "../../utils/context/schemaSet";
 import { getMeshProperties } from "../../utils/nameMapper";
 import { isEmptyObj } from "../../utils/utils";
 import { groupWorkloadByVersion } from "../../utils/workloadFilter";
-import { createPatternFromConfig, getHumanReadablePatternServiceName, getPatternServiceName } from "../MesheryMeshInterface/helpers";
+import { createPatternFromConfig, getHumanReadablePatternServiceName, getPatternServiceName, recursiveCleanObject } from "../MesheryMeshInterface/helpers";
 import LazyPatternServiceForm, { getWorkloadTraitAndType } from "../MesheryMeshInterface/LazyPatternServiceForm";
 import PatternServiceForm from "../MesheryMeshInterface/PatternServiceForm";
 import CodeEditor from "./CodeEditor";
 import NameToIcon from "./NameToIcon";
 import CustomBreadCrumb from "./CustomBreadCrumb";
+import { randomPatternNameGenerator as getRandomName } from "../../utils/utils"
+import _ from "lodash";
+import { iconMedium } from "../../css/icons.styles";
 
-const useStyles = makeStyles((theme) => ({
+const styles = (theme) => ({
   backButton : {
     marginRight : theme.spacing(2),
   },
   appBar : {
     marginBottom : "16px",
-    backgroundColor : "#fff",
+    backgroundColor : theme.palette.secondary.appBar,
     borderRadius : "8px"
   },
   yamlDialogTitle : {
@@ -44,6 +46,12 @@ const useStyles = makeStyles((theme) => ({
       minHeight : "300px",
       height : '100%',
     }
+  },
+  patternType : {
+    padding : '0px',
+    paddingBottom : '5px',
+    paddingTop : '5px',
+    justifyContent : 'center'
   },
   formCtrl : {
     width : "60px",
@@ -85,9 +93,24 @@ const useStyles = makeStyles((theme) => ({
     fontSize : theme.typography.pxToRem(15),
     fontWeight : theme.typography.fontWeightRegular,
   },
-}));
+});
 
-function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPattern }) {
+function removeRedundantFieldsFromSettings(settings) {
+  if (!settings || _.isEmpty(settings)) {
+    return {}
+  }
+
+  const newSettings = { ...settings };
+
+  delete newSettings.name;
+  delete newSettings.namespace;
+  delete newSettings.labels;
+  delete newSettings.annotations;
+
+  return newSettings;
+}
+
+function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPattern, classes }) {
   const { workloadTraitSet, meshWorkloads } = useContext(SchemaContext);
   const [workloadTraitsSet, setWorkloadTraitsSet] = useState(workloadTraitSet);
   const [deployServiceConfig, setDeployServiceConfig] = useState(getPatternJson());
@@ -100,7 +123,6 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
   const [viewType, setViewType] = useState("list");
   const [activeCR, setActiveCR] = useState({});
   const [patternName, setPatternName] = useState(pattern.name)
-  const classes = useStyles();
   const reference = useRef({});
 
   useEffect(() => {
@@ -229,12 +251,17 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
         return;
       }
     } else { // normal rjsf
+      const settings = reference.current?.getSettings();
+      const { name, namespace, labels, annotations } = settings;
       cfg = {
         [(Math.random() + 1).toString(36).substring(2)] : {
-          settings : reference.current?.getSettings(),
-          traits : reference.current?.getTraits(),
+          name,
+          namespace,
+          labels,
+          annotations,
           type : schemaSet?.oam_definition?.metadata?.name || "NA",
-          name : "<Name-Of-Component>",
+          settings : removeRedundantFieldsFromSettings(settings),
+          traits : reference.current?.getTraits(),
         }
       }
     }
@@ -251,7 +278,7 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
       setDeployServiceConfig({ ...deployServiceConfig, [getPatternKey(cfg)] : cfg?.services?.[key] });
   };
 
-  const handleAddonsOff =(key) => {
+  const handleAddonsOff = (key) => {
     const dConfig = { ...deployServiceConfig }
     delete dConfig?.[key]
     handleCodeEditorYamlChange(dConfig)
@@ -272,9 +299,18 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
     setYaml(deployConfigYaml);
   };
 
+  function deleteConfiguration() {
+    setSelectedPattern(resetSelectedPattern());
+  }
+
   function handleSubmitFinalPattern(yaml, id, name, action) {
     console.log("submitting a new pattern", yaml)
-    onSubmit(yaml, id, name, action);
+    onSubmit({
+      data : yaml,
+      id : id,
+      name : name,
+      type : action
+    });
     setSelectedPattern(resetSelectedPattern()); // Remove selected pattern
   }
 
@@ -301,7 +337,6 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
   }
 
   function getMeshOptions() {
-    console.log({ meshWorkloads });
     return meshWorkloads ? Object.keys(meshWorkloads) : [];
   }
 
@@ -316,6 +351,13 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
   async function setActivePatternWithRefinedSchema(schema) {
     const refinedSchema = await getWorkloadTraitAndType(schema);
     setActiveForm(refinedSchema);
+  }
+
+  function cleanPattern() {
+    const cfg = { ...deployServiceConfig }
+    recursiveCleanObject(cfg);
+    setDeployServiceConfig(cfg)
+    handleCodeEditorYamlChange(cfg)
   }
 
   function toggleView() {
@@ -344,21 +386,32 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
       <AppBar position="static" className={classes.appBar} elevation={0}>
         <Toolbar className={classes.toolbar}>
           <FormControl className={classes.formCtrl}>
-            <Select
+            <TextField
+              select={true}
+              SelectProps={{
+                MenuProps : {
+                  anchorOrigin : {
+                    vertical : "bottom",
+                    horizontal : "left"
+                  },
+                  getContentAnchorEl : null
+                }
+              }}
+              InputProps={{ disableUnderline : true }}
               labelId="service-mesh-selector"
               id="service-mesh-selector"
               value={selectedMeshType}
               onChange={handleMeshSelection}
-              disableUnderline
+              fullWidth
             >
               {getMeshOptions().map(item => {
                 const details = getMeshProperties(item);
                 return (
-                  <MenuItem key={details.name} value={details.name}>
+                  <MenuItem className={classes.patternType} key={details.name} value={details.name}>
                     <img src={details.img} height="32px" />
                   </MenuItem>);
               })}
-            </Select>
+            </TextField>
           </FormControl>
           {
             selectedVersion && selectedVersionMesh &&
@@ -436,9 +489,9 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
             <IconButton
               aria-label="Save"
               color="primary"
-              onClick={() => handleSubmitFinalPattern(yaml, "", `meshery_${Math.floor(trueRandom() * 100)}`, "upload")}
+              onClick={() => handleSubmitFinalPattern(yaml, "", getRandomName(), "upload")}
             >
-              <FileCopyIcon />
+              <FileCopyIcon style={iconMedium} />
             </IconButton>
           </Tooltip>
           <Tooltip title="Update Pattern">
@@ -447,21 +500,24 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
               color="primary"
               onClick={() => handleSubmitFinalPattern(yaml, pattern.id, pattern.name, "update")}
             >
-              <SaveIcon />
+              <SaveIcon style={iconMedium} />
             </IconButton>
           </Tooltip>
           <Tooltip title="Delete Pattern">
             <IconButton
               aria-label="Delete"
               color="primary"
-              onClick={() => handleSubmitFinalPattern(yaml, pattern.id, pattern.name, "delete")}
+              // onClick={() => handleSubmitFinalPattern(yaml, pattern.id, pattern.name, "delete")}
+              onClick={() => {
+                deleteConfiguration()
+              }}
             >
-              <DeleteIcon />
+              <DeleteIcon style={iconMedium}/>
             </IconButton>
           </Tooltip>
           <Tooltip title="Toggle View">
             <IconButton color="primary" onClick={toggleView}>
-              <ListAltIcon />
+              <ListAltIcon style={iconMedium} />
             </IconButton>
           </Tooltip>
         </Toolbar>
@@ -538,9 +594,6 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
                             .sort((a, b) => (getPatternServiceName(a.workload) < getPatternServiceName(b.workload) ? -1 : 1))
                             .map((s, i) => (
                               <Grid item key={`svc-form-addons-${i}`}>
-                                {
-                                  console.log("f", deployServiceConfig?.[getPatternServiceName(s.workload)], getPatternServiceName(s.workload))
-                                }
                                 <LazyPatternServiceForm
                                   formData={{ settings : deployServiceConfig?.[getPatternServiceName(s.workload)] }}
                                   onSettingsChange={handleSettingsChange(s.workload)}
@@ -560,7 +613,7 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
               </Grid>)
         }
         <Grid item xs={12} md={6} >
-          <CodeEditor yaml={yaml} saveCodeEditorChanges={saveCodeEditorChanges} />
+          <CodeEditor yaml={yaml} saveCodeEditorChanges={saveCodeEditorChanges} cleanHandler={() => cleanPattern()} />
         </Grid>
       </Grid>
       <CustomBreadCrumb
@@ -573,5 +626,4 @@ function PatternConfiguratorComponent({ pattern, onSubmit, show : setSelectedPat
 }
 
 
-export default PatternConfiguratorComponent;
-
+export default withStyles(styles)(PatternConfiguratorComponent);
