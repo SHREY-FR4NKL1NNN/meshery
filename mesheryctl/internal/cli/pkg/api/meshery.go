@@ -48,7 +48,10 @@ func Add(url string, body io.Reader, headers map[string]string) (*http.Response,
 }
 
 func GenerateDataFromBodyResponse[T any](response *http.Response) (*T, error) {
-	// defers the closing of the response body after its use, ensuring that the resources are properly released.
+	if response == nil || response.Body == nil {
+		return nil, ErrGenerateDataForInvalidResponse()
+	}
+
 	defer func() { _ = response.Body.Close() }()
 
 	data, err := io.ReadAll(response.Body)
