@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	googleuuid "github.com/google/uuid"
+	"github.com/google/uuid"
 	"github.com/meshery/meshery/mesheryctl/internal/cli/pkg/api"
 	"github.com/meshery/meshery/mesheryctl/pkg/utils"
 	mErrors "github.com/meshery/meshkit/errors"
@@ -28,13 +28,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type createEnvironmentFlags struct {
-	orgId       string
-	name        string
-	description string
-}
-
-var createEnvironmentFlagsProvided createEnvironmentFlags
+var (
+	createEnvironmentPayload environment.EnvironmentPayload
+	createEnvironmentOrgId   string
+)
 
 var createEnvironmentCmd = &cobra.Command{
 	Use:   "create",
@@ -48,27 +45,19 @@ mesheryctl environment create --orgId [orgId] --name [name] --description [descr
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		const errMsg = "[ Organization ID | Name | Description ] aren't specified\n\nUsage: mesheryctl environment create --orgId [orgId] --name [name] --description [description]\nRun 'mesheryctl environment create --help' to see detailed help message"
 
-		if createEnvironmentFlagsProvided.orgId == "" || createEnvironmentFlagsProvided.name == "" || createEnvironmentFlagsProvided.description == "" {
+		if createEnvironmentOrgId == "" || createEnvironmentPayload.Name == "" || createEnvironmentPayload.Description == "" {
 			return utils.ErrInvalidArgument(errors.New(errMsg))
 		}
 
-		if !utils.IsUUID(createEnvironmentFlagsProvided.orgId) {
-			return utils.ErrInvalidUUID(fmt.Errorf("invalid Organization ID: %s", createEnvironmentFlagsProvided.orgId))
+		if !utils.IsUUID(createEnvironmentOrgId) {
+			return utils.ErrInvalidUUID(fmt.Errorf("invalid Organization ID: %s", createEnvironmentOrgId))
 		}
 
+		createEnvironmentPayload.OrgId = uuid.MustParse(createEnvironmentOrgId)
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// PreRunE already validated the UUID format; Parse here only to get the typed value.
-		orgUUID := googleuuid.MustParse(createEnvironmentFlagsProvided.orgId)
-
-		payload := &environment.EnvironmentPayload{
-			Name:        createEnvironmentFlagsProvided.name,
-			Description: createEnvironmentFlagsProvided.description,
-			OrgId:       orgUUID,
-		}
-
-		payloadBytes, err := json.Marshal(payload)
+		payloadBytes, err := json.Marshal(&createEnvironmentPayload)
 		if err != nil {
 			return err
 		}
@@ -76,19 +65,19 @@ mesheryctl environment create --orgId [orgId] --name [name] --description [descr
 		if err != nil {
 			if meshkitErr, ok := err.(*mErrors.Error); ok {
 				if meshkitErr.Code == utils.ErrFailReqStatusCode {
-					return errCreateEnvironment(createEnvironmentFlagsProvided.name, createEnvironmentFlagsProvided.orgId)
+					return errCreateEnvironment(createEnvironmentPayload.Name, createEnvironmentOrgId)
 				}
 			}
 			return err
 		}
 
-		utils.Log.Infof("Environment named %s created in organization id %s", createEnvironmentFlagsProvided.name, createEnvironmentFlagsProvided.orgId)
+		utils.Log.Infof("Environment named %s created in organization id %s", createEnvironmentPayload.Name, createEnvironmentOrgId)
 		return nil
 	},
 }
 
 func init() {
-	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentFlagsProvided.orgId, "orgId", "o", "", "Organization ID")
-	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentFlagsProvided.name, "name", "n", "", "Name of the environment")
-	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentFlagsProvided.description, "description", "d", "", "Description of the environment")
+	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentOrgId, "orgId", "o", "", "Organization ID")
+	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentPayload.Name, "name", "n", "", "Name of the environment")
+	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentPayload.Description, "description", "d", "", "Description of the environment")
 }
