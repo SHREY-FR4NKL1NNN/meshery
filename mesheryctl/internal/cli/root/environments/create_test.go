@@ -1,12 +1,13 @@
 package environments
 
 import (
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	mesheryctlflags "github.com/meshery/meshery/mesheryctl/internal/cli/pkg/flags"
 	"github.com/meshery/meshery/mesheryctl/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 func TestCreateEnvironment(t *testing.T) {
@@ -28,7 +29,29 @@ func TestCreateEnvironment(t *testing.T) {
 			ExpectedResponse: "",
 			ExpectError:      true,
 			IsOutputGolden:   false,
-			ExpectedError:    utils.ErrInvalidArgument(errors.New("[ Organization ID | Name | Description ] aren't specified\n\nUsage: mesheryctl environment create --orgId [orgId] --name [name] --description [description]\nRun 'mesheryctl environment create --help' to see detailed help message")),
+			ExpectedError:    utils.ErrFlagsInvalid(fmt.Errorf("Invalid value for --orgId '', Invalid value for --name '', Invalid value for --description ''")),
+		},
+		{
+			Name:             "Create environment with invalid organization ID",
+			Args:             []string{"create", "--name", testConstants["environmentName"], "--description", "integration test", "--orgId", "invalid-org-id"},
+			URL:              "/api/environments",
+			HttpMethod:       "POST",
+			Fixture:          "",
+			ExpectedResponse: "",
+			ExpectError:      true,
+			IsOutputGolden:   false,
+			ExpectedError:    utils.ErrFlagsInvalid(fmt.Errorf("Invalid value for --orgid 'invalid-org-id': must be a valid UUID")),
+		},
+		{
+			Name:             "Create environment with empty required flag values",
+			Args:             []string{"create", "--name", "", "--description", "", "--orgId", ""},
+			URL:              "/api/environments",
+			HttpMethod:       "POST",
+			Fixture:          "",
+			ExpectedResponse: "",
+			ExpectError:      true,
+			IsOutputGolden:   false,
+			ExpectedError:    utils.ErrFlagsInvalid(fmt.Errorf("Invalid value for --orgId '', Invalid value for --name '', Invalid value for --description ''")),
 		},
 		{
 			Name:             "Create environment successfully",
@@ -42,6 +65,6 @@ func TestCreateEnvironment(t *testing.T) {
 		},
 	}
 
-	// Run tests
+	mesheryctlflags.InitValidators(EnvironmentCmd)
 	utils.InvokeMesheryctlTestCommand(t, update, EnvironmentCmd, tests, currDir, "environments")
 }
