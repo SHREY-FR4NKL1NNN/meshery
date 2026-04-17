@@ -64,10 +64,8 @@ mesheryctl environment create --orgId [orgId] --name [name] --description [descr
 		}
 		_, err = api.Add(environmentApiPath, bytes.NewBuffer(payloadBytes), nil)
 		if err != nil {
-			if meshkitErr, ok := err.(*mErrors.Error); ok {
-				if meshkitErr.Code == utils.ErrFailReqStatusCode {
-					return errCreateEnvironment(createEnvironmentPayload.Name, createEnvironmentFlags.OrganizationID)
-				}
+			if mErrors.GetCode(err) == utils.ErrFailReqStatusCode {
+				return errCreateEnvironment(createEnvironmentPayload.Name, createEnvironmentFlags.OrganizationID)
 			}
 			return err
 		}

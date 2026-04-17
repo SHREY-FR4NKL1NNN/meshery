@@ -91,13 +91,14 @@ func (wp *WorkspacePersister) GetWorkspaces(orgID, search, order, page, pageSize
 	// Convert fetched workspaces to AvailableWorkspace type
 	availableWorkspaces := make([]workspace.AvailableWorkspace, 0, len(workspacesFetched))
 	for _, ws := range workspacesFetched {
+		organizationID := core.Uuid(ws.OrganizationID)
 		aw := workspace.AvailableWorkspace{
 			CreatedAt:      ws.CreatedAt,
 			DeletedAt:      ws.DeletedAt,
 			Description:    ws.Description,
 			ID:             ws.ID,
 			Name:           ws.Name,
-			OrganizationId: core.Uuid(ws.OrganizationID),
+			OrganizationId: &organizationID,
 			OwnerId:        ws.Owner,
 			UpdatedAt:      ws.UpdatedAt,
 		}
