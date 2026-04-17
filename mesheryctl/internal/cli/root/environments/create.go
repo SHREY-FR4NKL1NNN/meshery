@@ -79,7 +79,4 @@ func init() {
 	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentFlags.OrganizationID, "orgId", "o", "", "Organization ID")
 	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentFlags.Name, "name", "n", "", "Name of the environment")
 	createEnvironmentCmd.Flags().StringVarP(&createEnvironmentFlags.Description, "description", "d", "", "Description of the environment")
-	_ = createEnvironmentCmd.MarkFlagRequired("orgId")
-	_ = createEnvironmentCmd.MarkFlagRequired("name")
-	_ = createEnvironmentCmd.MarkFlagRequired("description")
 }
