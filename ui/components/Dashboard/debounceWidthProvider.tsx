@@ -28,22 +28,25 @@ const debounceWidthProvider = <P extends object>(
       if (!(node instanceof HTMLElement)) return;
 
       const scheduleWidthUpdate = (newWidth: number) => {
+        const performUpdate = () => {
+          setWidth(newWidth);
+          setMounted(true);
+        };
+
         if (debounceTimeout > 0) {
-          if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+          if (debounceTimerRef.current !== null) clearTimeout(debounceTimerRef.current);
           debounceTimerRef.current = window.setTimeout(() => {
-            setWidth((w) => (w === newWidth ? w : newWidth));
-            setMounted((isMounted) => (isMounted ? isMounted : true));
+            performUpdate();
             debounceTimerRef.current = null;
           }, debounceTimeout);
         } else {
-          setWidth((w) => (w === newWidth ? w : newWidth));
-          setMounted((isMounted) => (isMounted ? isMounted : true));
+          performUpdate();
         }
       };
 
       const observer = new ResizeObserver((entries) => {
         if (!entries[0]) return;
-        if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+        if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = requestAnimationFrame(() => {
           scheduleWidthUpdate(Math.floor(entries[0].contentRect.width));
           rafIdRef.current = null;
@@ -53,8 +56,8 @@ const debounceWidthProvider = <P extends object>(
       observer.observe(node);
 
       return () => {
-        if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-        if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
+        if (debounceTimerRef.current !== null) clearTimeout(debounceTimerRef.current);
         observer.disconnect();
       };
     }, [debounceTimeout]);
