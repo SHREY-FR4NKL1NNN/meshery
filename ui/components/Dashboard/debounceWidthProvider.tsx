@@ -1,6 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-
-const layoutClassName = 'react-grid-layout';
 const DEFAULT_WIDTH = 1280;
 
 interface DebounceWidthProviderProps {
@@ -22,6 +20,7 @@ const debounceWidthProvider = <P extends object>(
     const elementRef = useRef<HTMLDivElement>(null);
     const rafIdRef = useRef<number | null>(null);
     const debounceTimerRef = useRef<number | null>(null);
+    const hasMeasuredRef = useRef(false);
 
     useEffect(() => {
       const node = elementRef.current;
@@ -31,9 +30,10 @@ const debounceWidthProvider = <P extends object>(
         const performUpdate = () => {
           setWidth(newWidth);
           setMounted(true);
+          hasMeasuredRef.current = true;
         };
 
-        if (debounceTimeout > 0) {
+        if (hasMeasuredRef.current && debounceTimeout > 0) {
           if (debounceTimerRef.current !== null) clearTimeout(debounceTimerRef.current);
           debounceTimerRef.current = window.setTimeout(() => {
             performUpdate();
@@ -63,11 +63,7 @@ const debounceWidthProvider = <P extends object>(
     }, [debounceTimeout]);
 
     return (
-      <div
-        className={[className, layoutClassName].filter(Boolean).join(' ')}
-        style={style}
-        ref={elementRef}
-      >
+      <div className={className} style={style} ref={elementRef}>
         {(!measureBeforeMount || mounted) && <ComposedComponent {...(rest as P)} width={width} />}
       </div>
     );
