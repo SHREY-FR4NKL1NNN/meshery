@@ -11,54 +11,74 @@ func TestDesignNameFromFileName(t *testing.T) {
 		expectedName string
 	}{
 		{
-			name:         "regular yaml file",
+			name:         "given regular yaml file when DesignNameFromFileName then return name",
 			fileName:     "my-deployment.yaml",
 			expectedName: "my-deployment",
 		},
 		{
-			name:         "regular yml file",
+			name:         "given regular yml file when DesignNameFromFileName then return name",
 			fileName:     "my-deployment.yml",
 			expectedName: "my-deployment",
 		},
 		{
-			name:         "tar.gz file",
+			name:         "given tar.gz file when DesignNameFromFileName then strip compound extension",
 			fileName:     "my-chart.tar.gz",
 			expectedName: "my-chart",
 		},
 		{
-			name:         "json file",
+			name:         "given json file when DesignNameFromFileName then return name",
 			fileName:     "config.json",
 			expectedName: "config",
 		},
 		{
-			name:         "file with multiple dots",
+			name:         "given filename with multiple dots when DesignNameFromFileName then strip only last extension",
 			fileName:     "my.k8s.deployment.yaml",
 			expectedName: "my.k8s.deployment",
 		},
 		{
-			name:         "empty filename",
+			name:         "given empty filename when DesignNameFromFileName then return empty",
 			fileName:     "",
 			expectedName: "",
 		},
 		{
-			name:         "filename without extension",
+			name:         "given filename without extension when DesignNameFromFileName then return as is",
 			fileName:     "mydesign",
 			expectedName: "mydesign",
 		},
 		{
-			name:         "tgz file",
+			name:         "given tgz file when DesignNameFromFileName then strip extension",
 			fileName:     "helm-chart.tgz",
 			expectedName: "helm-chart",
 		},
 		{
-			name:         "extension only",
+			name:         "given extension only when DesignNameFromFileName then return empty",
 			fileName:     ".yaml",
 			expectedName: "",
 		},
 		{
-			name:         "tar.gz extension only",
+			name:         "given tar.gz extension only when DesignNameFromFileName then return empty",
 			fileName:     ".tar.gz",
 			expectedName: "",
+		},
+		{
+			name:         "given unsupported xls extension when DesignNameFromFileName then still strip extension",
+			fileName:     "spreadsheet.xls",
+			expectedName: "spreadsheet",
+		},
+		{
+			name:         "given unsupported zip extension when DesignNameFromFileName then still strip extension",
+			fileName:     "archive.zip",
+			expectedName: "archive",
+		},
+		{
+			name:         "given unsupported exe extension when DesignNameFromFileName then still strip extension",
+			fileName:     "installer.exe",
+			expectedName: "installer",
+		},
+		{
+			name:         "given unsupported tar extension when DesignNameFromFileName then strip last suffix only",
+			fileName:     "archive.tar",
+			expectedName: "archive",
 		},
 	}
 

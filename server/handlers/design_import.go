@@ -269,9 +269,8 @@ func (h *Handler) DesignFileImportHandler(
 		return
 	}
 
-	if importDesignPayload.Name != "" {
-		design.Name = importDesignPayload.Name
-	} else if design.Name == "" {
+	design.Name = importDesignPayload.Name
+	if design.Name == "" {
 		if name := pCore.DesignNameFromFileName(fileToImport.FileName); name != "" {
 			design.Name = name
 		}
