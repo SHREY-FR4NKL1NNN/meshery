@@ -43,12 +43,25 @@ type importVariant struct {
 	File FileToImport
 }
 
+// designImportHTTPClient is the shared client used for URL-variant
+// imports. A bounded Timeout prevents a slow or unresponsive remote
+// from hanging the handler goroutine indefinitely — the default
+// http.Client has no timeout, which is the class of bug review
+// feedback on meshery/meshery#18845 called out. 60s is generous for
+// a single-file fetch (Kubernetes manifests, Helm charts, Meshery
+// designs) while still bounding damage from dead endpoints.
+var designImportHTTPClient = &http.Client{
+	Timeout: 60 * time.Second,
+}
+
 // resolveImportVariant decodes the request body against the two oneOf
 // variants published in the schema, enforces the "exactly one of"
 // invariant, and — for the URL variant — fetches the remote file
-// before returning. Any nil return paired with a non-nil error is a
-// 400-class failure: malformed body, ambiguous payload, unreachable
-// URL.
+// before returning. On error, the returned importVariant carries any
+// context we could extract (the caller's supplied Name plus, for the
+// URL variant, the URL echoed in FileName) so that the downstream
+// ImportErrorEvent does not emit `Failed to import design '' from ''`
+// for unhappy-path requests.
 func resolveImportVariant(body pattern.MesheryPatternImportRequestBody) (importVariant, error) {
 	filePayload, fileErr := body.AsMesheryPatternImportFilePayload()
 	urlPayload, urlErr := body.AsMesheryPatternImportURLPayload()
@@ -58,7 +71,13 @@ func resolveImportVariant(body pattern.MesheryPatternImportRequestBody) (importV
 
 	switch {
 	case hasFile && hasURL:
-		return importVariant{}, errors.New("request body must contain exactly one of File Import (file + file_name) or URL Import (url), not both")
+		// Echo the filename so the error event can name what was
+		// rejected; both variants look plausible to the decoder.
+		return importVariant{
+				Name: stringFromPtr(filePayload.Name),
+				File: FileToImport{FileName: filePayload.FileName},
+			},
+			errors.New("request body must contain exactly one of File Import (file + file_name) or URL Import (url), not both")
 	case !hasFile && !hasURL:
 		return importVariant{}, errors.New("request body must contain either a File Import (file + file_name) or a URL Import (url)")
 	case hasFile:
@@ -69,7 +88,11 @@ func resolveImportVariant(body pattern.MesheryPatternImportRequestBody) (importV
 	default:
 		fetched, err := fetchFileFromURL(urlPayload.Url)
 		if err != nil {
-			return importVariant{}, err
+			// Preserve the URL as the "source" for the failure event.
+			return importVariant{
+				Name: stringFromPtr(urlPayload.Name),
+				File: FileToImport{FileName: urlPayload.Url},
+			}, err
 		}
 		return importVariant{Name: stringFromPtr(urlPayload.Name), File: fetched}, nil
 	}
@@ -77,9 +100,12 @@ func resolveImportVariant(body pattern.MesheryPatternImportRequestBody) (importV
 
 // fetchFileFromURL performs the remote GET behind a URL-variant import
 // and derives a filename from either Content-Disposition or the path
-// segment of the URL.
+// segment of the URL. Uses designImportHTTPClient so every fetch is
+// bounded by a timeout, and rejects non-2xx responses explicitly so a
+// 404 HTML body isn't handed to the design parser as if it were a
+// valid import file.
 func fetchFileFromURL(fileURL string) (FileToImport, error) {
-	resp, err := http.Get(fileURL)
+	resp, err := designImportHTTPClient.Get(fileURL)
 	if err != nil {
 		return FileToImport{}, models.ErrDoRequest(err, "GET", fileURL)
 	}
@@ -88,6 +114,9 @@ func fetchFileFromURL(fileURL string) (FileToImport, error) {
 			_ = resp.Body.Close()
 		}
 	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return FileToImport{}, fmt.Errorf("fetching %s returned HTTP %d %s", fileURL, resp.StatusCode, resp.Status)
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return FileToImport{}, err
@@ -306,7 +335,13 @@ func (h *Handler) DesignFileImportHandler(
 		return
 	}
 
-	design.Name = variant.Name
+	// Only overwrite the design name when the caller supplied one in
+	// the request — leaving it unset should preserve whatever name the
+	// import pipeline parsed out of the source file (e.g. `metadata.name`
+	// from a design YAML, or the derived name from a Kubernetes manifest).
+	if variant.Name != "" {
+		design.Name = variant.Name
+	}
 	patternFile, err := encoding.Marshal(design)
 
 	if err != nil {
