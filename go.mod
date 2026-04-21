@@ -9,11 +9,11 @@ replace github.com/compose-spec/compose-go/v2 => github.com/compose-spec/compose
 // The following replaces are used for local development
 
 // Temporary: pulls meshery/schemas#771 (MesheryPatternImportRequestBody
-// oneOf refactor). Remove after that PR merges and a tagged release bumps
-// the direct require below to v1.0.9. Reviewers building this branch
-// locally may instead check out meshery/schemas fix/design-import-schema-content-type
-// into ../schemas and swap in `replace github.com/meshery/schemas => ../schemas`.
-replace github.com/meshery/schemas => ../schemas
+// oneOf refactor) via a pseudo-version of the contributor's fork so CI
+// resolves the dependency without a local sibling checkout. Remove this
+// replace once meshery/schemas#771 merges and v1.0.9 is tagged; then
+// bump the direct require below.
+replace github.com/meshery/schemas => github.com/jamieplu/schemas v0.0.0-20260421191813-47f2189be2e9
 
 // replace github.com/meshery/meshkit => ../meshkit
 
