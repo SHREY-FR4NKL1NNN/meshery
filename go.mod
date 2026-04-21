@@ -8,13 +8,6 @@ replace github.com/compose-spec/compose-go/v2 => github.com/compose-spec/compose
 
 // The following replaces are used for local development
 
-// Temporary: pulls meshery/schemas#771 (MesheryPatternImportRequestBody
-// oneOf refactor) via a pseudo-version of the contributor's fork so CI
-// resolves the dependency without a local sibling checkout. Remove this
-// replace once meshery/schemas#771 merges and v1.0.9 is tagged; then
-// bump the direct require below.
-replace github.com/meshery/schemas => github.com/jamieplu/schemas v0.0.0-20260421191813-47f2189be2e9
-
 // replace github.com/meshery/meshkit => ../meshkit
 
 // replace github.com/meshery/meshsync v0.8.26 => ../meshsync
@@ -56,7 +49,7 @@ require (
 	github.com/meshery/meshery-operator v0.8.11
 	github.com/meshery/meshkit v1.0.2
 	github.com/meshery/meshsync v1.0.0
-	github.com/meshery/schemas v1.0.5
+	github.com/meshery/schemas v1.0.9
 	github.com/nsf/termbox-go v1.1.1
 	github.com/oapi-codegen/runtime v1.3.1
 	github.com/olekukonko/tablewriter v1.1.0
