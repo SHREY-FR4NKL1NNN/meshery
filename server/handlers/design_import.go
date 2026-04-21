@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,47 +25,81 @@ import (
 	"github.com/meshery/schemas/models/v1beta1/pattern"
 )
 
-type MesheryDesignImportPayload struct {
-	Name     string `json:"name,omitempty"`
-	URL      string `json:"url,omitempty"`
-	File     []byte `json:"file,omitempty"`
-	FileName string `json:"file_name,omitempty"`
-}
-
+// FileToImport is the internal tuple of bytes + filename that the
+// import pipeline works with after the request-body variant has been
+// resolved. It is not part of the wire contract — see the schemas
+// repo's MesheryPatternImportRequestBody for that.
 type FileToImport struct {
 	Data     []byte
 	FileName string
 }
 
-func GetFileToImportFromPayload(payload MesheryDesignImportPayload) (FileToImport, error) {
-	if payload.URL != "" {
-		resp, err := http.Get(payload.URL)
-		if err != nil {
-			return FileToImport{}, models.ErrDoRequest(err, "GET", payload.URL)
-		}
-		defer func() {
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
-		}()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return FileToImport{}, err
-		}
+// importVariant captures the content extracted from one arm of the
+// MesheryPatternImportRequestBody oneOf. Keeping the display name
+// alongside FileToImport lets callers derive event descriptions without
+// re-inspecting the raw payload.
+type importVariant struct {
+	Name string
+	File FileToImport
+}
 
-		// Get filename from Content-Disposition header or URL
-		filename := getFileNameFromResponse(resp, payload.URL)
+// resolveImportVariant decodes the request body against the two oneOf
+// variants published in the schema, enforces the "exactly one of"
+// invariant, and — for the URL variant — fetches the remote file
+// before returning. Any nil return paired with a non-nil error is a
+// 400-class failure: malformed body, ambiguous payload, unreachable
+// URL.
+func resolveImportVariant(body pattern.MesheryPatternImportRequestBody) (importVariant, error) {
+	filePayload, fileErr := body.AsMesheryPatternImportFilePayload()
+	urlPayload, urlErr := body.AsMesheryPatternImportURLPayload()
 
-		return FileToImport{
-			Data:     body,
-			FileName: filename,
+	hasFile := fileErr == nil && len(filePayload.File) > 0 && filePayload.FileName != ""
+	hasURL := urlErr == nil && urlPayload.Url != ""
+
+	switch {
+	case hasFile && hasURL:
+		return importVariant{}, errors.New("request body must contain exactly one of File Import (file + file_name) or URL Import (url), not both")
+	case !hasFile && !hasURL:
+		return importVariant{}, errors.New("request body must contain either a File Import (file + file_name) or a URL Import (url)")
+	case hasFile:
+		return importVariant{
+			Name: stringFromPtr(filePayload.Name),
+			File: FileToImport{Data: filePayload.File, FileName: filePayload.FileName},
 		}, nil
+	default:
+		fetched, err := fetchFileFromURL(urlPayload.Url)
+		if err != nil {
+			return importVariant{}, err
+		}
+		return importVariant{Name: stringFromPtr(urlPayload.Name), File: fetched}, nil
 	}
+}
 
-	return FileToImport{
-		Data:     payload.File,
-		FileName: payload.FileName,
-	}, nil
+// fetchFileFromURL performs the remote GET behind a URL-variant import
+// and derives a filename from either Content-Disposition or the path
+// segment of the URL.
+func fetchFileFromURL(fileURL string) (FileToImport, error) {
+	resp, err := http.Get(fileURL)
+	if err != nil {
+		return FileToImport{}, models.ErrDoRequest(err, "GET", fileURL)
+	}
+	defer func() {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return FileToImport{}, err
+	}
+	return FileToImport{Data: body, FileName: getFileNameFromResponse(resp, fileURL)}, nil
+}
+
+func stringFromPtr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func getFileNameFromResponse(resp *http.Response, fileURL string) string {
@@ -202,15 +237,12 @@ func (h *Handler) logErrorParsingRequestBody(rw http.ResponseWriter, provider mo
 	}
 }
 
-func ImportErrorEvent(eventBuilder events.EventBuilder, importPayload MesheryDesignImportPayload, err error) *events.Event {
+func ImportErrorEvent(eventBuilder events.EventBuilder, variant importVariant, err error) *events.Event {
 
-	source := importPayload.URL
-	if source == "" {
-		source = importPayload.FileName
-	}
+	source := variant.File.FileName
 	event := eventBuilder.WithSeverity(events.Error).WithMetadata(map[string]interface{}{
 		"error": err,
-	}).WithDescription(fmt.Sprintf("Failed to import design '%s' from %s", importPayload.Name, source)).Build()
+	}).WithDescription(fmt.Sprintf("Failed to import design '%s' from %s", variant.Name, source)).Build()
 
 	return event
 
@@ -232,9 +264,9 @@ func (h *Handler) DesignFileImportHandler(
 	userID := user.ID
 	eventBuilder := events.NewEvent().FromUser(userID).FromSystem(*h.SystemID).WithCategory("pattern").WithAction("create").ActedUpon(userID).WithSeverity(events.Informational)
 
-	var importDesignPayload MesheryDesignImportPayload
+	var importBody pattern.MesheryPatternImportRequestBody
 
-	if err := json.NewDecoder(r.Body).Decode(&importDesignPayload); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&importBody); err != nil {
 		h.logErrorParsingRequestBody(rw, provider, err, userID, eventBuilder)
 		return
 	}
@@ -247,29 +279,34 @@ func (h *Handler) DesignFileImportHandler(
 		return
 	}
 
-	fileToImport, err := GetFileToImportFromPayload(importDesignPayload)
-
+	variant, err := resolveImportVariant(importBody)
 	if err != nil {
-		h.log.Error(fmt.Errorf("conversion: failed to get file from payload  %w", err))
+		// resolveImportVariant failures are 400-class — either the body
+		// violated the oneOf contract (both/neither set) or the URL
+		// variant couldn't be fetched. Either way the caller needs to
+		// correct the request, not the server to recover.
+		h.log.Error(fmt.Errorf("resolve import variant: %w", err))
 		http.Error(rw, err.Error(), http.StatusBadRequest)
-		event := ImportErrorEvent(*eventBuilder, importDesignPayload, err)
+		event := ImportErrorEvent(*eventBuilder, variant, err)
 		_ = provider.PersistEvent(*event, token)
 		go h.config.EventBroadcaster.Publish(userID, event)
 		return
 	}
+
+	fileToImport := variant.File
 
 	design, sourceFileType, err := ConvertFileToDesign(fileToImport, h.registryManager, h.log)
 
 	if err != nil {
 		h.log.Error(fmt.Errorf("conversion: failed to convert to design %w", err))
 		http.Error(rw, err.Error(), http.StatusBadRequest)
-		event := ImportErrorEvent(*eventBuilder, importDesignPayload, err)
+		event := ImportErrorEvent(*eventBuilder, variant, err)
 		_ = provider.PersistEvent(*event, token)
 		go h.config.EventBroadcaster.Publish(userID, event)
 		return
 	}
 
-	design.Name = importDesignPayload.Name
+	design.Name = variant.Name
 	patternFile, err := encoding.Marshal(design)
 
 	if err != nil {

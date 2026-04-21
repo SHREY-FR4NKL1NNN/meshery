@@ -97,7 +97,7 @@ func (wp *WorkspacePersister) GetWorkspaces(orgID, search, order, page, pageSize
 			Description:    ws.Description,
 			ID:             ws.ID,
 			Name:           ws.Name,
-			OrganizationId: core.Uuid(ws.OrganizationID),
+			OrganizationId: func() *core.Uuid { u := core.Uuid(ws.OrganizationID); return &u }(),
 			OwnerId:        ws.Owner,
 			UpdatedAt:      ws.UpdatedAt,
 		}

@@ -8,7 +8,12 @@ replace github.com/compose-spec/compose-go/v2 => github.com/compose-spec/compose
 
 // The following replaces are used for local development
 
-// replace github.com/meshery/schemas v0.8.92 => ../schemas
+// Temporary: pulls meshery/schemas#771 (MesheryPatternImportRequestBody
+// oneOf refactor). Remove after that PR merges and a tagged release bumps
+// the direct require below to v1.0.6+. Reviewers building this branch
+// locally may instead check out meshery/schemas fix/design-import-schema-content-type
+// into ../schemas and swap in `replace github.com/meshery/schemas => ../schemas`.
+replace github.com/meshery/schemas => ../schemas
 
 // replace github.com/meshery/meshkit => ../meshkit
 
@@ -260,7 +265,7 @@ require (
 	github.com/inhies/go-bytesize v0.0.0-20220417184213-4913239db9cf // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.7.6 // indirect
+	github.com/jackc/pgx/v5 v5.9.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jhump/protoreflect v1.17.0 // indirect
