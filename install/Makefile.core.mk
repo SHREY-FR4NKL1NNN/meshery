@@ -65,8 +65,8 @@ PORT:=9081
 # is disabled unless a developer explicitly points it at a live collector.
 # Previously this defaulted to localhost:4317 which floods logs with
 # "traces export: ... connection refused" every ~10s when no collector is
-# running. To enable tracing, override on the command line, e.g.:
-#   make server-local OTEL_CONFIG="$$'service_name: meshery-server\nservice_version: 1.0.0\nendpoint: localhost:4317\ninsecure: true'"
+# running. To enable tracing from bash, override on the command line, e.g.:
+#   make server-local OTEL_CONFIG=$'service_name: meshery-server\nservice_version: 1.0.0\nendpoint: localhost:4317\ninsecure: true'
 OTEL_CONFIG ?=
 #-----------------------------------------------------------------------------
 # Build
