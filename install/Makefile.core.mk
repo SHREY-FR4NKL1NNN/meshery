@@ -57,7 +57,8 @@ PROVIDER_CAPABILITIES_FILEPATH="" # Path to capabilities file for remote provide
 #-----------------------------------------------------------------------------
 MESHERY_K8S_SKIP_COMP_GEN ?= TRUE
 APPLICATIONCONFIGPATH="./apps.json"
-PORT:=9081
+PORT ?= 9081
+USE_GO_POLICY_ENGINE ?= true
 # OpenTelemetry Config (Ansi-C string format)
 OTEL_CONFIG=$$'service_name: meshery-server\nservice_version: 1.0.0\nendpoint: localhost:4317\ninsecure: true'
 #-----------------------------------------------------------------------------
