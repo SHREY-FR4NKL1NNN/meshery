@@ -25,19 +25,25 @@ import (
 // This test exercises AssignInitialCtx with a K8sContext whose API server
 // is unreachable, which forces the error path previously responsible for
 // the nil-deref panic. The assertions:
-//   - no panic
-//   - machinectx.log is the logger we passed (proving the attach happened
-//     before any action could consume it)
+//   - no panic on the error path
+//   - AssignInitialCtx surfaces the underlying AssignClientSetToContext error
+//     (so the caller can handle it) and does not return a populated context
+//   - machinectx.log is the exact logger we passed (proving the attach
+//     happened before any action could consume it)
 func TestAssignInitialCtx_AttachesLoggerBeforeClientSetAssignment(t *testing.T) {
 	log, err := logger.New("test", logger.Options{})
 	if err != nil {
 		t.Fatalf("failed to build test logger: %v", err)
 	}
 
-	user := &models.User{}
-	if userID, err := uuid.NewV4(); err == nil {
-		user.ID = core.Uuid(userID)
+	// Fail fast on UUID generation so the event builder always sees a valid
+	// user ID and the test setup is deterministic; silently leaving user.ID
+	// unset would change the code path we're exercising.
+	userID, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("failed to generate user UUID: %v", err)
 	}
+	user := &models.User{ID: core.Uuid(userID)}
 
 	sysID := core.Uuid(uuid.FromStringOrNil("00000000-0000-0000-0000-000000000000"))
 
@@ -66,13 +72,22 @@ func TestAssignInitialCtx_AttachesLoggerBeforeClientSetAssignment(t *testing.T) 
 
 	result, _, err := AssignInitialCtx(ctx, machinectx, log)
 
-	// The production repro errors out of AssignClientSetToContext; we accept
-	// any error or nil here — what we're asserting is *the absence of a
-	// panic* and that the log attachment happened before that error path ran.
-	_ = err
-	_ = result
+	// AssignClientSetToContext must fail for an unreachable/invalid context —
+	// that's the exact production regression we're guarding. If this ever
+	// returns nil here, either the test lost its repro or GenerateK8sClientSet
+	// started tolerating unreachable servers, both of which invalidate this
+	// guard.
+	if err == nil {
+		t.Fatal("expected AssignInitialCtx to return an error for an unreachable K8s context, got nil — the regression guard is no longer exercising the panicking path")
+	}
+	if result != nil {
+		t.Fatalf("expected nil machine context on AssignClientSetToContext error, got %#v", result)
+	}
 
-	if machinectx.log == nil {
-		t.Fatal("expected machinectx.log to be populated before AssignClientSetToContext runs; it was nil — the very ordering bug that produced the login panic")
+	// Logger must be the exact instance we passed in: equality (not just
+	// non-nil) proves the attach happened before AssignClientSetToContext
+	// ran, which is the invariant the ordering fix establishes.
+	if machinectx.log != log {
+		t.Fatal("expected machinectx.log to be the logger passed into AssignInitialCtx and assigned before AssignClientSetToContext; a different or nil value reintroduces the login-panic ordering bug")
 	}
 }
