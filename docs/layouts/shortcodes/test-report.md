@@ -1,17 +1,17 @@
 ### END-TO-END TESTS
 
-- Testing started at: April 22nd 2026, 4:11:55 am
+- Testing started at: April 22nd 2026, 4:54:17 am
 
 **📦 Test Result Summary**
 
-- ✅ 141 passed
-- ❌ 0 failed
+- ✅ 139 passed
+- ❌ 2 failed
 - ⚠️ 0 flaked
 - ⏩ 3 skipped
 
-⌛ _Duration: 6 minutes and 4 seconds_
+⌛ _Duration: 7 minutes and 49 seconds_
 
-**Overall Result**: 👍 All tests passed.
+**Overall Result**: 👎 Some tests failed.
 
 
 
@@ -38,7 +38,7 @@
 | 15 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
 | 16 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
 | 17 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
-| 18 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
+| 18 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ❌ |
 | 19 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
 | 20 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
 | 21 | Meshery | chromium-meshery-provider | config patching correctness | relationship | ✅ |
@@ -57,7 +57,7 @@
 | 34 | Meshery | chromium-meshery-provider | evaluation idempotency | relationship | ✅ |
 | 35 | Meshery | chromium-meshery-provider | evaluation idempotency | relationship | ✅ |
 | 36 | Meshery | chromium-meshery-provider | Grafana elements on metrics tab |  | ✅ |
-| 37 | Meshery | chromium-meshery-provider | Import a Model via CSV Import |  | ✅ |
+| 37 | Meshery | chromium-meshery-provider | Import a Model via CSV Import |  | ❌ |
 | 38 | Meshery | chromium-meshery-provider | Import a Model via File Import |  | ✅ |
 | 39 | Meshery | chromium-meshery-provider | Import a Model via Url Import |  | ✅ |
 | 40 | Meshery | chromium-meshery-provider | Logout from current user session |  | ✅ |
@@ -171,6 +171,42 @@
 | 148 | None | remote-setup | authenticate with Remote Provider |  | ✅ |
 
 </div>
+</details>
+
+
+
+
+**❌ Failed Test Details**
+
+The following tests failed. Click on each to see the failure reason:
+
+
+<details>
+<summary>❌ config patching correctness (Meshery - chromium-meshery-provider)</summary>
+
+**File Location:** `Not Found`
+
+**Error Message:**
+```
+[31mTest timeout of 60000ms exceeded.[39m
+```
+
+
+
+</details>
+
+<details>
+<summary>❌ Import a Model via CSV Import (Meshery - chromium-meshery-provider)</summary>
+
+**File Location:** `Not Found`
+
+**Error Message:**
+```
+[31mTest timeout of 60000ms exceeded.[39m
+```
+
+
+
 </details>
 
 
