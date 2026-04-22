@@ -32,7 +32,7 @@ func TestCreateEnvironment(t *testing.T) {
 			ExpectedError:    utils.ErrFlagsInvalid(fmt.Errorf("Invalid value for --orgId '', Invalid value for --name '', Invalid value for --description ''")),
 		},
 		{
-			Name:             "Create environment with invalid organization ID",
+			Name:             "given invalid organization ID when environment create then throw error",
 			Args:             []string{"create", "--name", testConstants["environmentName"], "--description", "integration test", "--orgId", "invalid-org-id"},
 			URL:              "/api/environments",
 			HttpMethod:       "POST",
