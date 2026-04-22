@@ -140,7 +140,7 @@ func patchMutatorsAction(rel *relationship.RelationshipDefinition, design *patte
 		for i := 0; i < count; i++ {
 			mutatorValue := configurationForComponentAtPath(mutatorRefs[i], mutatorComp, design)
 			oldValue := configurationForComponentAtPath(mutatedRefs[i], mutatedComp, design)
-			if deepEqual(mutatorValue, oldValue) {
+			if deepEqual(mutatorValue, oldValue) || mutatorValue == nil {
 				continue
 			}
 			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedRefs[i]), mutatedID, mutatedRefs[i], mutatorValue))
