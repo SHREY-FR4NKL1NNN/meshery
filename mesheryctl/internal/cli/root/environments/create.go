@@ -42,8 +42,7 @@ var createEnvironmentCmd = &cobra.Command{
 Find more information at: https://docs.meshery.io/reference/mesheryctl/environment/create`,
 	Example: `
 // Create a new environment
-mesheryctl environment create --orgId [orgId] --name [name] --description [description]
-`,
+mesheryctl environment create --orgId [orgId] --name [name] --description [description]`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return mesheryctlflags.ValidateCmdFlags(cmd, &createEnvironmentFlags)
 	},
@@ -60,17 +59,18 @@ mesheryctl environment create --orgId [orgId] --name [name] --description [descr
 		}
 		payloadBytes, err := json.Marshal(&createEnvironmentPayload)
 		if err != nil {
-			return err
+			return utils.ErrUnmarshal(err)
 		}
+
 		_, err = api.Add(environmentApiPath, bytes.NewBuffer(payloadBytes), nil)
 		if err != nil {
 			if mErrors.GetCode(err) == utils.ErrFailReqStatusCode {
-				return errCreateEnvironment(createEnvironmentPayload.Name, createEnvironmentFlags.OrganizationID)
+				return errCreateEnvironment(createEnvironmentFlags.Name, createEnvironmentFlags.OrganizationID)
 			}
 			return err
 		}
 
-		utils.Log.Infof("Environment named %s created in organization id %s", createEnvironmentPayload.Name, createEnvironmentFlags.OrganizationID)
+		utils.Log.Infof("Environment named %s created in organization id %s", createEnvironmentFlags.Name, createEnvironmentFlags.OrganizationID)
 		return nil
 	},
 }
