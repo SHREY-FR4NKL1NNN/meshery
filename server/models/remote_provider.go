@@ -4111,7 +4111,12 @@ func (l *RemoteProvider) TokenHandler(w http.ResponseWriter, r *http.Request, _ 
 			l.Log.Debugf("[TokenHandler] pre-warm capabilities: skip (user lookup failed: %v)", err)
 			return
 		}
-		if err := l.WriteCapabilitiesForUser(user.ID.String(), &providerProperties); err != nil {
+		// Mirror GetProviderCapabilities: always persist ProviderURL as the
+		// configured RemoteProviderURL so the cached per-user payload matches
+		// what a subsequent /api/provider/capabilities call would write.
+		providerPropertiesForUser := providerProperties
+		providerPropertiesForUser.ProviderURL = l.RemoteProviderURL
+		if err := l.WriteCapabilitiesForUser(user.ID.String(), &providerPropertiesForUser); err != nil {
 			l.Log.Debugf("[TokenHandler] pre-warm capabilities: write failed for user %s: %v", user.ID.String(), err)
 		}
 	}()
