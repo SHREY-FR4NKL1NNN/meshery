@@ -38,7 +38,7 @@ SHELL := /usr/bin/env bash -o pipefail
 # every sync tick. To use adapters, export ADAPTER_URLS in your shell, e.g.:
 #   export ADAPTER_URLS='localhost:10000 localhost:10001 localhost:10012 localhost:10013'
 # or override on the make command line:
-#   make server-local ADAPTER_URLS='localhost:10000'
+#   make server-local ADAPTER_URLS='localhost:10000 localhost:10001'
 ADAPTER_URLS ?= ""
 
 #-----------------------------------------------------------------------------
