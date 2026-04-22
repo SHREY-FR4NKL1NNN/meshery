@@ -25,6 +25,15 @@ type WorkspacePersister struct {
 	DB *database.Handler
 }
 
+// uuidPtr returns a pointer to the given core.Uuid. Schemas generated
+// from meshery/schemas v1.0.9+ use `*core.Uuid` for optional UUID
+// fields, so callers building those struct literals need a pointer to
+// a local copy. Extracting this out of the hot loop in GetWorkspaces
+// keeps the struct literal readable.
+func uuidPtr(u core.Uuid) *core.Uuid {
+	return &u
+}
+
 func (wp *WorkspacePersister) fetchUserDetails() *User {
 	return &User{
 		UserId:    "meshery",
@@ -91,14 +100,13 @@ func (wp *WorkspacePersister) GetWorkspaces(orgID, search, order, page, pageSize
 	// Convert fetched workspaces to AvailableWorkspace type
 	availableWorkspaces := make([]workspace.AvailableWorkspace, 0, len(workspacesFetched))
 	for _, ws := range workspacesFetched {
-		organizationID := core.Uuid(ws.OrganizationID)
 		aw := workspace.AvailableWorkspace{
 			CreatedAt:      ws.CreatedAt,
 			DeletedAt:      ws.DeletedAt,
 			Description:    ws.Description,
 			ID:             ws.ID,
 			Name:           ws.Name,
-			OrganizationId: &organizationID,
+			OrganizationId: uuidPtr(core.Uuid(ws.OrganizationID)),
 			OwnerId:        ws.Owner,
 			UpdatedAt:      ws.UpdatedAt,
 		}
