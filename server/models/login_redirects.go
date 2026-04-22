@@ -31,6 +31,7 @@ func resolvePostLoginRedirect(rawRef, fallback string) string {
 // which restarted InitiateLogin mid-mount.
 var authInitiationPaths = []string{
 	"/user/login",
+	"/auth/login",
 	"/api/user/token",
 	"/provider",
 }
