@@ -127,7 +127,7 @@ func TestRemoteProvider_OutboundOrgIdIsCanonical(t *testing.T) {
 			defer server.Close()
 
 			provider := newTestRemoteProvider(t, server.URL)
-			provider.ProviderProperties.Capabilities = Capabilities{
+			provider.Capabilities = Capabilities{
 				{Feature: tc.feature, Endpoint: tc.endpoint},
 			}
 
