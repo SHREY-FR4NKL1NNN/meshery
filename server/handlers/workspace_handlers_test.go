@@ -39,11 +39,12 @@ func (m *workspaceSpyProvider) GetWorkspaceByID(_ *http.Request, _, orgID string
 	return []byte(`{}`), nil
 }
 
-// TestGetWorkspacesHandler_RequiresOrgIdCaseSensitive asserts that the
-// canonical `orgId` query parameter is the only accepted form per the
-// identifier-naming migration plan. Legacy `orgID` (capital D) must no
-// longer satisfy the extraction.
-func TestGetWorkspacesHandler_RequiresOrgIdCaseSensitive(t *testing.T) {
+// TestGetWorkspacesHandler_AcceptsOrgIdAndLegacyOrgID asserts that the
+// canonical `orgId` query parameter is preferred, AND that the legacy
+// `orgID` spelling is still accepted as a dual-accept fallback during
+// the Phase 2 deprecation window (mesheryctl and other legacy clients
+// still emit `orgID`). Missing parameter continues to return 400.
+func TestGetWorkspacesHandler_AcceptsOrgIdAndLegacyOrgID(t *testing.T) {
 	cases := []struct {
 		name         string
 		rawQuery     string
@@ -59,10 +60,18 @@ func TestGetWorkspacesHandler_RequiresOrgIdCaseSensitive(t *testing.T) {
 			wantProvider: true,
 		},
 		{
-			name:         "legacy orgID is not accepted",
+			name:         "legacy orgID is accepted via dual-accept fallback",
 			rawQuery:     "orgID=abc",
-			wantStatus:   http.StatusBadRequest,
-			wantProvider: false,
+			wantStatus:   http.StatusOK,
+			wantOrgID:    "abc",
+			wantProvider: true,
+		},
+		{
+			name:         "canonical orgId wins when both are supplied",
+			rawQuery:     "orgId=canonical&orgID=legacy",
+			wantStatus:   http.StatusOK,
+			wantOrgID:    "canonical",
+			wantProvider: true,
 		},
 		{
 			name:         "missing parameter returns 400",
@@ -104,9 +113,10 @@ func TestGetWorkspacesHandler_RequiresOrgIdCaseSensitive(t *testing.T) {
 	}
 }
 
-// TestGetWorkspaceByIdHandler_RequiresOrgIdCaseSensitive mirrors the coverage
-// above for the single-workspace endpoint.
-func TestGetWorkspaceByIdHandler_RequiresOrgIdCaseSensitive(t *testing.T) {
+// TestGetWorkspaceByIdHandler_AcceptsOrgIdAndLegacyOrgID mirrors the coverage
+// above for the single-workspace endpoint: canonical `orgId` preferred,
+// legacy `orgID` dual-accepted during Phase 2.
+func TestGetWorkspaceByIdHandler_AcceptsOrgIdAndLegacyOrgID(t *testing.T) {
 	cases := []struct {
 		name         string
 		rawQuery     string
@@ -122,10 +132,18 @@ func TestGetWorkspaceByIdHandler_RequiresOrgIdCaseSensitive(t *testing.T) {
 			wantProvider: true,
 		},
 		{
-			name:         "legacy orgID is not accepted",
+			name:         "legacy orgID is accepted via dual-accept fallback",
 			rawQuery:     "orgID=abc",
-			wantStatus:   http.StatusBadRequest,
-			wantProvider: false,
+			wantStatus:   http.StatusOK,
+			wantOrgID:    "abc",
+			wantProvider: true,
+		},
+		{
+			name:         "canonical orgId wins when both are supplied",
+			rawQuery:     "orgId=canonical&orgID=legacy",
+			wantStatus:   http.StatusOK,
+			wantOrgID:    "canonical",
+			wantProvider: true,
 		},
 	}
 
