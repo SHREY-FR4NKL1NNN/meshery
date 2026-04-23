@@ -65,15 +65,92 @@ type MesheryPatternUPDATERequestBody struct {
 	CytoscapeJSON string                 `json:"cytoscape_json,omitempty"`
 }
 
+// DesignPostPayload is the request body for POST /api/pattern. Canonical
+// wire form is camelCase (`designFile`) per the identifier-naming
+// migration; legacy snake_case (`design_file`) and the alternate
+// "pattern file" vocabulary (`patternFile`, `pattern_file`) are still
+// accepted for the deprecation window so unmigrated clients (e.g.
+// meshery-extensions' meshmap `saveDesign` and Kanvas' legacy body
+// shape) keep working. Custom MarshalJSON emits both canonical and
+// legacy spellings so any external consumer still reading either form
+// continues to round-trip.
+//
+// Once every known consumer (meshery-cloud, meshery-extensions, Kanvas)
+// has migrated off the legacy spellings, drop MarshalJSON/UnmarshalJSON
+// and keep only the `designFile` struct tag.
 type DesignPostPayload struct {
-	ID         *core.Uuid               `json:"id,omitempty"`
-	Name       string                     `json:"name,omitempty"`
-	DesignFile design.PatternFile `json:"design_file"`
+	ID         *core.Uuid         `json:"id,omitempty"`
+	Name       string             `json:"name,omitempty"`
+	DesignFile design.PatternFile `json:"designFile"`
 	// Meshery doesn't have the user id fields
 	// but the remote provider is allowed to provide one
 	UserID      *string              `json:"user_id"`
 	Visibility  string               `json:"visibility"`
 	CatalogData v1alpha1.CatalogData `json:"catalog_data,omitempty"`
+}
+
+// MarshalJSON emits both the canonical (`designFile`) and legacy
+// (`design_file`) spellings for the design payload field so external
+// consumers on either vocabulary keep working while they migrate.
+// The alternate "pattern file" spellings (`patternFile` / `pattern_file`)
+// are accepted on the Unmarshal path but not emitted — they exist only
+// so clients that speak the legacy "pattern" vocabulary continue to
+// parse, not so Meshery introduces new wire forms.
+func (p DesignPostPayload) MarshalJSON() ([]byte, error) {
+	type alias DesignPostPayload
+	return json.Marshal(struct {
+		alias
+		DesignFileLegacy design.PatternFile `json:"design_file"`
+	}{
+		alias:            alias(p),
+		DesignFileLegacy: p.DesignFile,
+	})
+}
+
+// UnmarshalJSON accepts any of `designFile` (canonical), `patternFile`
+// (alternate camelCase vocabulary), `design_file` (legacy snake_case),
+// or `pattern_file` (legacy alternate). Precedence when multiple are
+// present: canonical camelCase wins over legacy; `designFile` wins
+// over `patternFile`.
+//
+// Implementation uses the embedded-alias pattern so every non-custom
+// field on DesignPostPayload (including any added later) unmarshals
+// via stdlib default rules — only the design-file key-precedence is
+// custom-handled here. The inner `*alias` is initialised to point at
+// the receiver, so fields absent from the input naturally reset to
+// their zero value per stdlib json.Unmarshal semantics; DesignFile is
+// explicitly re-zeroed before the precedence switch so a reused
+// receiver does not retain stale design data when the next payload
+// omits all four spellings.
+func (p *DesignPostPayload) UnmarshalJSON(data []byte) error {
+	type alias DesignPostPayload
+	aux := &struct {
+		*alias
+		DesignFileCanonical  *design.PatternFile `json:"designFile,omitempty"`
+		PatternFileCanonical *design.PatternFile `json:"patternFile,omitempty"`
+		DesignFileLegacy     *design.PatternFile `json:"design_file,omitempty"`
+		PatternFileLegacy    *design.PatternFile `json:"pattern_file,omitempty"`
+	}{alias: (*alias)(p)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	// Depth-0 aux fields win the `designFile` tag over the embedded
+	// alias's DesignFile by Go's json struct-tag precedence rules, so
+	// the alias's DesignFile is never populated directly — we apply the
+	// precedence-winning spelling below. Reset first so a reused receiver
+	// zeros cleanly when all four spellings are absent.
+	p.DesignFile = design.PatternFile{}
+	switch {
+	case aux.DesignFileCanonical != nil:
+		p.DesignFile = *aux.DesignFileCanonical
+	case aux.PatternFileCanonical != nil:
+		p.DesignFile = *aux.PatternFileCanonical
+	case aux.DesignFileLegacy != nil:
+		p.DesignFile = *aux.DesignFileLegacy
+	case aux.PatternFileLegacy != nil:
+		p.DesignFile = *aux.PatternFileLegacy
+	}
+	return nil
 }
 
 // PatternFileRequestHandler will handle requests of both type GET and POST
