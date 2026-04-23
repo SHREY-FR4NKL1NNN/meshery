@@ -113,43 +113,42 @@ func (p DesignPostPayload) MarshalJSON() ([]byte, error) {
 // present: canonical camelCase wins over legacy; `designFile` wins
 // over `patternFile`.
 //
-// Fields that are absent from the input are reset to their zero value
-// on the destination (matching stdlib json.Unmarshal semantics) so
-// callers reusing a DesignPostPayload across decodes do not see stale
-// data from a prior payload.
+// Implementation uses the embedded-alias pattern so every non-custom
+// field on DesignPostPayload (including any added later) unmarshals
+// via stdlib default rules — only the design-file key-precedence is
+// custom-handled here. The inner `*alias` is initialised to point at
+// the receiver, so fields absent from the input naturally reset to
+// their zero value per stdlib json.Unmarshal semantics; DesignFile is
+// explicitly re-zeroed before the precedence switch so a reused
+// receiver does not retain stale design data when the next payload
+// omits all four spellings.
 func (p *DesignPostPayload) UnmarshalJSON(data []byte) error {
-	var raw struct {
-		ID                *core.Uuid                  `json:"id,omitempty"`
-		Name              string                      `json:"name,omitempty"`
-		DesignFile        *design.PatternFile `json:"designFile"`
-		PatternFile       *design.PatternFile `json:"patternFile"`
-		DesignFileLegacy  *design.PatternFile `json:"design_file"`
-		PatternFileLegacy *design.PatternFile `json:"pattern_file"`
-		UserID            *string                     `json:"user_id"`
-		Visibility        string                      `json:"visibility"`
-		CatalogData       v1alpha1.CatalogData        `json:"catalog_data,omitempty"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
+	type alias DesignPostPayload
+	aux := &struct {
+		*alias
+		DesignFileCanonical  *design.PatternFile `json:"designFile,omitempty"`
+		PatternFileCanonical *design.PatternFile `json:"patternFile,omitempty"`
+		DesignFileLegacy     *design.PatternFile `json:"design_file,omitempty"`
+		PatternFileLegacy    *design.PatternFile `json:"pattern_file,omitempty"`
+	}{alias: (*alias)(p)}
+	if err := json.Unmarshal(data, aux); err != nil {
 		return err
 	}
-	p.ID = raw.ID
-	p.Name = raw.Name
-	p.UserID = raw.UserID
-	p.Visibility = raw.Visibility
-	p.CatalogData = raw.CatalogData
-	// Reset DesignFile to its zero value before applying the first
-	// spelling present, so a reused receiver does not retain stale
-	// design data when the next payload omits all four spellings.
+	// Depth-0 aux fields win the `designFile` tag over the embedded
+	// alias's DesignFile by Go's json struct-tag precedence rules, so
+	// the alias's DesignFile is never populated directly — we apply the
+	// precedence-winning spelling below. Reset first so a reused receiver
+	// zeros cleanly when all four spellings are absent.
 	p.DesignFile = design.PatternFile{}
 	switch {
-	case raw.DesignFile != nil:
-		p.DesignFile = *raw.DesignFile
-	case raw.PatternFile != nil:
-		p.DesignFile = *raw.PatternFile
-	case raw.DesignFileLegacy != nil:
-		p.DesignFile = *raw.DesignFileLegacy
-	case raw.PatternFileLegacy != nil:
-		p.DesignFile = *raw.PatternFileLegacy
+	case aux.DesignFileCanonical != nil:
+		p.DesignFile = *aux.DesignFileCanonical
+	case aux.PatternFileCanonical != nil:
+		p.DesignFile = *aux.PatternFileCanonical
+	case aux.DesignFileLegacy != nil:
+		p.DesignFile = *aux.DesignFileLegacy
+	case aux.PatternFileLegacy != nil:
+		p.DesignFile = *aux.PatternFileLegacy
 	}
 	return nil
 }

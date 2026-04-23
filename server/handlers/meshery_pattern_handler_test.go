@@ -2,15 +2,54 @@ package handlers
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 )
 
 // buildDesignPostBody returns a JSON body that wraps a minimal PatternFile
 // under the provided key. The PatternFile carries a name so tests can
-// assert which spelling "won" when multiple spellings are present.
+// assert which spelling "won" when multiple spellings are present. Values
+// are json-escaped via json.Marshal so names containing quotes, newlines,
+// or backslashes do not produce invalid JSON.
 func buildDesignPostBody(key, designName string) string {
-	return `{"name":"envelope","` + key + `":{"id":"00000000-0000-0000-0000-000000000000","name":"` + designName + `","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]}}`
+	patternFile := map[string]any{
+		"id":            "00000000-0000-0000-0000-000000000000",
+		"name":          designName,
+		"schemaVersion": "designs.meshery.io/v1beta1",
+		"version":       "0.0.1",
+		"components":    []any{},
+		"relationships": []any{},
+	}
+	body := map[string]any{
+		"name": "envelope",
+		key:    patternFile,
+	}
+	out, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	return string(out)
+}
+
+// buildDesignPostBodyMulti returns a JSON body with multiple design-file
+// spellings present, each carrying a distinct name so precedence tests
+// can assert which spelling won.
+func buildDesignPostBodyMulti(entries map[string]string) string {
+	body := map[string]any{"name": "e"}
+	for key, designName := range entries {
+		body[key] = map[string]any{
+			"id":            "00000000-0000-0000-0000-000000000000",
+			"name":          designName,
+			"schemaVersion": "designs.meshery.io/v1beta1",
+			"version":       "0.0.1",
+			"components":    []any{},
+			"relationships": []any{},
+		}
+	}
+	out, err := json.Marshal(body)
+	if err != nil {
+		panic(err)
+	}
+	return string(out)
 }
 
 // TestDesignPostPayload_UnmarshalAcceptsAllDesignFileKeyFlavors locks in
@@ -72,27 +111,23 @@ func TestDesignPostPayload_UnmarshalPrecedenceCanonicalWins(t *testing.T) {
 		wantName string
 	}{
 		{
-			name: "designFile beats patternFile",
-			body: `{"name":"e","designFile":{"id":"00000000-0000-0000-0000-000000000000","name":"canonical","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]},` +
-				`"patternFile":{"id":"00000000-0000-0000-0000-000000000000","name":"alternate","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]}}`,
+			name:     "designFile beats patternFile",
+			body:     buildDesignPostBodyMulti(map[string]string{"designFile": "canonical", "patternFile": "alternate"}),
 			wantName: "canonical",
 		},
 		{
-			name: "designFile beats design_file",
-			body: `{"name":"e","designFile":{"id":"00000000-0000-0000-0000-000000000000","name":"canonical","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]},` +
-				`"design_file":{"id":"00000000-0000-0000-0000-000000000000","name":"legacy-snake","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]}}`,
+			name:     "designFile beats design_file",
+			body:     buildDesignPostBodyMulti(map[string]string{"designFile": "canonical", "design_file": "legacy-snake"}),
 			wantName: "canonical",
 		},
 		{
-			name: "patternFile beats design_file",
-			body: `{"name":"e","patternFile":{"id":"00000000-0000-0000-0000-000000000000","name":"alternate","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]},` +
-				`"design_file":{"id":"00000000-0000-0000-0000-000000000000","name":"legacy-snake","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]}}`,
+			name:     "patternFile beats design_file",
+			body:     buildDesignPostBodyMulti(map[string]string{"patternFile": "alternate", "design_file": "legacy-snake"}),
 			wantName: "alternate",
 		},
 		{
-			name: "design_file beats pattern_file",
-			body: `{"name":"e","design_file":{"id":"00000000-0000-0000-0000-000000000000","name":"design-legacy","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]},` +
-				`"pattern_file":{"id":"00000000-0000-0000-0000-000000000000","name":"pattern-legacy","schemaVersion":"designs.meshery.io/v1beta1","version":"0.0.1","components":[],"relationships":[]}}`,
+			name:     "design_file beats pattern_file",
+			body:     buildDesignPostBodyMulti(map[string]string{"design_file": "design-legacy", "pattern_file": "pattern-legacy"}),
 			wantName: "design-legacy",
 		},
 	}
@@ -169,10 +204,24 @@ func TestDesignPostPayload_MarshalEmitsBothDesignFileKeyFlavors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	s := string(out)
-	for _, want := range []string{`"designFile"`, `"design_file"`} {
-		if !strings.Contains(s, want) {
-			t.Errorf("marshal output missing %q; got %s", want, s)
+	// Assert against top-level JSON keys rather than substring-matching
+	// the serialized output: the latter can false-pass if the same
+	// substrings ever appear inside nested objects or escaped strings.
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(out, &top); err != nil {
+		t.Fatalf("could not re-decode marshal output to top-level keys: %v (out=%s)", err, string(out))
+	}
+	for _, wantKey := range []string{"designFile", "design_file"} {
+		if _, ok := top[wantKey]; !ok {
+			t.Errorf("marshal output missing top-level key %q; got keys %v", wantKey, topLevelKeys(top))
 		}
 	}
+}
+
+func topLevelKeys(m map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
