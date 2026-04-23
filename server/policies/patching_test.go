@@ -900,3 +900,277 @@ func TestInventoryPatchingFullPipeline(t *testing.T) {
 	}
 	t.Fatal("Deployment not found in evaluation response")
 }
+
+// TestWalletPatchingCleanupOnDelete verifies that deleting a wallet relationship
+// whose mutation is still in place produces a reverse patch (value=nil).
+func TestWalletPatchingCleanupOnDelete(t *testing.T) {
+	p := &HierarchicalWalletPolicy{}
+
+	deployID, _ := uuid.FromString("00000000-0000-0000-0000-000000000001")
+	podTplID, _ := uuid.FromString("00000000-0000-0000-0000-000000000002")
+
+	// Both components already hold the mutator value (simulating a prior patch
+	// that has been applied and persisted).
+	deploy := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "Deployment"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"serviceAccountName": "my-sa",
+					},
+				},
+			},
+		},
+	}
+	deploy.ID = deployID
+
+	podTpl := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "PodTemplate"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"serviceAccountName": "my-sa",
+			},
+		},
+	}
+	podTpl.ID = podTplID
+
+	design := makePatternFile([]*component.ComponentDefinition{deploy, podTpl}, nil)
+
+	mutatorRef := relationship.MutatorRef{[]string{"configuration", "spec", "template", "spec", "serviceAccountName"}}
+	mutatedRef := relationship.MutatedRef{[]string{"configuration", "spec", "serviceAccountName"}}
+	relStatus := relationship.RelationshipDefinitionStatus("deleted")
+	selectorSet := relationship.SelectorSet{
+		relationship.SelectorSetItem{
+			Allow: relationship.Selector{
+				From: []relationship.SelectorItem{
+					{
+						ID:   &deployID,
+						Kind: strPtr("Deployment"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatorRef: &mutatorRef,
+						},
+					},
+				},
+				To: []relationship.SelectorItem{
+					{
+						ID:   &podTplID,
+						Kind: strPtr("PodTemplate"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatedRef: &mutatedRef,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rel := &relationship.RelationshipDefinition{
+		Kind:             relationship.Hierarchical,
+		RelationshipType: "parent",
+		SubType:          "wallet",
+		Status:           &relStatus,
+		Model:            modelv1beta1.ModelReference{Name: "kubernetes"},
+		Selectors:        &selectorSet,
+	}
+	rel.ID, _ = uuid.FromString("00000000-0000-0000-0000-000000000010")
+
+	actions := p.SideEffects(rel, design)
+	if len(actions) == 0 {
+		t.Fatal("Expected reverse patch action on delete, got none")
+	}
+
+	found := false
+	for _, a := range actions {
+		if a.Op == UpdateComponentConfigurationOp && a.ID == podTplID.String() && a.UpdateValue == nil {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected reverse patch (nil value) on PodTemplate.serviceAccountName, got actions: %+v", actions)
+	}
+}
+
+// TestWalletCleanupOnDeleteFullPipeline verifies that a deleted wallet relationship
+// restores the mutated field through the full evaluation pipeline.
+func TestWalletCleanupOnDeleteFullPipeline(t *testing.T) {
+	deployID, _ := uuid.FromString("00000000-0000-0000-0000-000000000001")
+	podTplID, _ := uuid.FromString("00000000-0000-0000-0000-000000000002")
+
+	deploy := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "Deployment"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"serviceAccountName": "my-sa",
+					},
+				},
+			},
+		},
+	}
+	deploy.ID = deployID
+
+	// PodTemplate.serviceAccountName already holds the mutator value, simulating
+	// a previous evaluation that applied the patch.
+	podTpl := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "PodTemplate"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"serviceAccountName": "my-sa",
+			},
+		},
+	}
+	podTpl.ID = podTplID
+
+	mutatorRef := relationship.MutatorRef{[]string{"configuration", "spec", "template", "spec", "serviceAccountName"}}
+	mutatedRef := relationship.MutatedRef{[]string{"configuration", "spec", "serviceAccountName"}}
+	relStatus := relationship.RelationshipDefinitionStatus("deleted")
+	relID, _ := uuid.FromString("00000000-0000-0000-0000-000000000010")
+	selectorSet := relationship.SelectorSet{
+		relationship.SelectorSetItem{
+			Allow: relationship.Selector{
+				From: []relationship.SelectorItem{
+					{
+						ID:   &deployID,
+						Kind: strPtr("Deployment"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatorRef: &mutatorRef,
+						},
+					},
+				},
+				To: []relationship.SelectorItem{
+					{
+						ID:   &podTplID,
+						Kind: strPtr("PodTemplate"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatedRef: &mutatedRef,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rel := &relationship.RelationshipDefinition{
+		Kind:             relationship.Hierarchical,
+		RelationshipType: "parent",
+		SubType:          "wallet",
+		Status:           &relStatus,
+		Model:            modelv1beta1.ModelReference{Name: "kubernetes"},
+		Selectors:        &selectorSet,
+	}
+	rel.ID = relID
+
+	design := makePatternFile(
+		[]*component.ComponentDefinition{deploy, podTpl},
+		[]*relationship.RelationshipDefinition{rel},
+	)
+
+	log, _ := logger.New("test", logger.Options{Format: logger.SyslogLogFormat})
+	engine := NewGoEngine(log)
+	resp, err := engine.EvaluateDesign(*design, nil)
+	if err != nil {
+		t.Fatalf("EvaluateDesign failed: %v", err)
+	}
+
+	for _, comp := range resp.Design.Components {
+		if comp.Component.Kind == "PodTemplate" {
+			spec, ok := comp.Configuration["spec"].(map[string]interface{})
+			if !ok {
+				t.Fatal("PodTemplate spec missing after evaluation")
+			}
+			if spec["serviceAccountName"] != nil {
+				t.Errorf("Expected PodTemplate.serviceAccountName to be nil after delete, got %v", spec["serviceAccountName"])
+			}
+			return
+		}
+	}
+	t.Fatal("PodTemplate not found in evaluation response")
+}
+
+// TestWalletPatchingSkipsWhenValueDiverged verifies that a delete does not clear
+// a mutated field if the field no longer holds the mutator's value (someone else
+// changed it), avoiding incorrect cleanup.
+func TestWalletPatchingSkipsWhenValueDiverged(t *testing.T) {
+	p := &HierarchicalWalletPolicy{}
+
+	deployID, _ := uuid.FromString("00000000-0000-0000-0000-000000000001")
+	podTplID, _ := uuid.FromString("00000000-0000-0000-0000-000000000002")
+
+	deploy := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "Deployment"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"serviceAccountName": "my-sa",
+					},
+				},
+			},
+		},
+	}
+	deploy.ID = deployID
+
+	// PodTemplate holds a different value than the mutator (user changed it).
+	podTpl := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "PodTemplate"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"serviceAccountName": "user-changed",
+			},
+		},
+	}
+	podTpl.ID = podTplID
+
+	design := makePatternFile([]*component.ComponentDefinition{deploy, podTpl}, nil)
+
+	mutatorRef := relationship.MutatorRef{[]string{"configuration", "spec", "template", "spec", "serviceAccountName"}}
+	mutatedRef := relationship.MutatedRef{[]string{"configuration", "spec", "serviceAccountName"}}
+	relStatus := relationship.RelationshipDefinitionStatus("deleted")
+	selectorSet := relationship.SelectorSet{
+		relationship.SelectorSetItem{
+			Allow: relationship.Selector{
+				From: []relationship.SelectorItem{
+					{
+						ID:   &deployID,
+						Kind: strPtr("Deployment"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatorRef: &mutatorRef,
+						},
+					},
+				},
+				To: []relationship.SelectorItem{
+					{
+						ID:   &podTplID,
+						Kind: strPtr("PodTemplate"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatedRef: &mutatedRef,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rel := &relationship.RelationshipDefinition{
+		Kind:             relationship.Hierarchical,
+		RelationshipType: "parent",
+		SubType:          "wallet",
+		Status:           &relStatus,
+		Model:            modelv1beta1.ModelReference{Name: "kubernetes"},
+		Selectors:        &selectorSet,
+	}
+	rel.ID, _ = uuid.FromString("00000000-0000-0000-0000-000000000010")
+
+	actions := p.SideEffects(rel, design)
+	if len(actions) != 0 {
+		t.Errorf("Expected no reverse patches when mutated field diverged from mutator, got: %+v", actions)
+	}
+}

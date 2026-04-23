@@ -98,10 +98,13 @@ func cleanupDeletedRelationshipsActions(rels []*relationship.RelationshipDefinit
 }
 
 // patchMutatorsAction creates patch actions for relationships that have mutator/mutated refs.
+// When the relationship is in StatusDeleted, it emits reverse patches (value=nil) for
+// fields that still hold the mutator's value, so deletion restores the pre-mutation state.
 func patchMutatorsAction(rel *relationship.RelationshipDefinition, design *pattern.PatternFile) []PolicyAction {
 	if rel.Selectors == nil {
 		return nil
 	}
+	reverse := getRelStatus(rel) == StatusDeleted
 	var actions []PolicyAction
 
 	for _, ss := range *rel.Selectors {
@@ -140,10 +143,19 @@ func patchMutatorsAction(rel *relationship.RelationshipDefinition, design *patte
 		for i := 0; i < count; i++ {
 			mutatorValue := configurationForComponentAtPath(mutatorRefs[i], mutatorComp, design)
 			oldValue := configurationForComponentAtPath(mutatedRefs[i], mutatedComp, design)
-			if mutatorValue == nil || deepEqual(mutatorValue, oldValue) {
+			if mutatorValue == nil {
 				continue
 			}
-			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedRefs[i]), mutatedID, mutatedRefs[i], mutatorValue))
+			value := mutatorValue
+			if reverse {
+				if !deepEqual(mutatorValue, oldValue) {
+					continue
+				}
+				value = nil
+			} else if deepEqual(mutatorValue, oldValue) {
+				continue
+			}
+			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedRefs[i]), mutatedID, mutatedRefs[i], value))
 		}
 	}
 	return actions

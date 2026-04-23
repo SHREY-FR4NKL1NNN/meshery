@@ -33,9 +33,6 @@ func (p *EdgeBindingPolicy) IdentifyRelationship(relDef *relationship.Relationsh
 }
 
 func (p *EdgeBindingPolicy) SideEffects(rel *relationship.RelationshipDefinition, design *pattern.PatternFile) []PolicyAction {
-	if getRelStatus(rel) == StatusDeleted {
-		return nil
-	}
 	actions := patchMutatorsAction(rel, design)
 	if len(actions) > 0 {
 		return actions
@@ -45,10 +42,13 @@ func (p *EdgeBindingPolicy) SideEffects(rel *relationship.RelationshipDefinition
 
 // patchBindingMatchFields patches the binding component's configuration
 // using values from the match fields of the binding relationship selectors.
+// When the relationship is in StatusDeleted, it emits reverse patches (value=nil)
+// so deletion restores the pre-mutation state.
 func patchBindingMatchFields(rel *relationship.RelationshipDefinition, design *pattern.PatternFile) []PolicyAction {
 	if rel.Selectors == nil {
 		return nil
 	}
+	reverse := getRelStatus(rel) == StatusDeleted
 	var actions []PolicyAction
 
 	for _, ss := range *rel.Selectors {
@@ -66,14 +66,15 @@ func patchBindingMatchFields(rel *relationship.RelationshipDefinition, design *p
 				continue
 			}
 
-			actions = append(actions, patchBindingMatchFieldsForSelector(sel.Match, comp, design)...)
+			actions = append(actions, patchBindingMatchFieldsForSelector(sel.Match, comp, design, reverse)...)
 		}
 	}
 	return actions
 }
 
 // patchBindingMatchFieldsForSelector processes match fields for a single selector.
-func patchBindingMatchFieldsForSelector(match *relationship.MatchSelector, _ *component.ComponentDefinition, design *pattern.PatternFile) []PolicyAction {
+// If reverse is true, emits nil-valued patches for fields that still hold the mutator's value.
+func patchBindingMatchFieldsForSelector(match *relationship.MatchSelector, _ *component.ComponentDefinition, design *pattern.PatternFile, reverse bool) []PolicyAction {
 	var actions []PolicyAction
 
 	type matchSide struct {
@@ -118,10 +119,19 @@ func patchBindingMatchFieldsForSelector(match *relationship.MatchSelector, _ *co
 			mutatorValue := configurationForComponentAtPath(mutatorPath, matchComp, design)
 			oldValue := configurationForComponentAtPath(mutatedPath, otherComp, design)
 
-			if deepEqual(mutatorValue, oldValue) || mutatorValue == nil {
+			if mutatorValue == nil {
 				continue
 			}
-			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedPath), otherComp.ID.String(), mutatedPath, mutatorValue))
+			value := mutatorValue
+			if reverse {
+				if !deepEqual(mutatorValue, oldValue) {
+					continue
+				}
+				value = nil
+			} else if deepEqual(mutatorValue, oldValue) {
+				continue
+			}
+			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedPath), otherComp.ID.String(), mutatedPath, value))
 		}
 	}
 	return actions
