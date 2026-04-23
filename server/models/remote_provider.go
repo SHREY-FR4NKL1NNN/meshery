@@ -2790,8 +2790,8 @@ func (l *RemoteProvider) SaveMesheryFilter(tokenString string, filter *MesheryFi
 	ep, _ := l.Capabilities.GetEndpointForFeature(PersistMesheryFilters)
 
 	data, err := json.Marshal(map[string]interface{}{
-		"filter_data": filter,
-		"save":        true,
+		"filterData": filter,
+		"save":       true,
 	})
 
 	if err != nil {
@@ -3255,7 +3255,7 @@ func (l *RemoteProvider) RemoteFilterFile(req *http.Request, resourceURL, path s
 		"url":  resourceURL,
 		"save": save,
 		"path": path,
-		"filter_data": MesheryFilter{
+		"filterData": MesheryFilter{
 			FilterResource: resource,
 		},
 	})
