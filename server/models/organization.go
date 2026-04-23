@@ -57,12 +57,17 @@ func (p *OrganizationsPage) UnmarshalJSON(data []byte) error {
 	}
 	p.Organizations = raw.Organizations
 	p.Page = raw.Page
+	// Match stdlib json.Unmarshal semantics: fields absent from the input
+	// reset to their zero value on the destination (important when callers
+	// reuse the same OrganizationsPage across decodes).
+	p.TotalCount = 0
 	switch {
 	case raw.TotalCount != nil:
 		p.TotalCount = *raw.TotalCount
 	case raw.TotalCountLegacy != nil:
 		p.TotalCount = *raw.TotalCountLegacy
 	}
+	p.PageSize = 0
 	switch {
 	case raw.PageSize != nil:
 		p.PageSize = *raw.PageSize
