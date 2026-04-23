@@ -3,7 +3,7 @@ package models
 import (
 	"encoding/gob"
 
-	userV1beta "github.com/meshery/schemas/models/v1beta1/user"
+	userV1beta "github.com/meshery/schemas/models/v1beta2/user"
 )
 
 func init() {
