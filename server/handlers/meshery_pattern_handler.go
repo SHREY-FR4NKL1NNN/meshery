@@ -39,9 +39,9 @@ import (
 	regv1beta1 "github.com/meshery/meshkit/models/meshmodel/registry/v1beta1"
 	"github.com/meshery/schemas/models/core"
 	"github.com/meshery/schemas/models/v1alpha2"
-	"github.com/meshery/schemas/models/v1beta1/component"
 	"github.com/meshery/schemas/models/v1beta1/connection"
-	patternV1beta1 "github.com/meshery/schemas/models/v1beta1/pattern"
+	"github.com/meshery/schemas/models/v1beta2/component"
+	design "github.com/meshery/schemas/models/v1beta3/design"
 	"gopkg.in/yaml.v3"
 )
 
@@ -68,7 +68,7 @@ type MesheryPatternUPDATERequestBody struct {
 type DesignPostPayload struct {
 	ID         *core.Uuid               `json:"id,omitempty"`
 	Name       string                     `json:"name,omitempty"`
-	DesignFile patternV1beta1.PatternFile `json:"design_file"`
+	DesignFile design.PatternFile `json:"design_file"`
 	// Meshery doesn't have the user id fields
 	// but the remote provider is allowed to provide one
 	UserID      *string              `json:"user_id"`
@@ -814,9 +814,9 @@ func (h *Handler) DownloadMesheryPatternHandler(
 			}
 		}()
 
-		var design patternV1beta1.PatternFile
+		var designPattern design.PatternFile
 
-		err = encoding.Unmarshal([]byte(pattern.PatternFile), &design)
+		err = encoding.Unmarshal([]byte(pattern.PatternFile), &designPattern)
 
 		if err != nil {
 
@@ -832,7 +832,7 @@ func (h *Handler) DownloadMesheryPatternHandler(
 			return
 		}
 
-		ymlDesign, err := yaml.Marshal(design)
+		ymlDesign, err := yaml.Marshal(designPattern)
 
 		if err != nil {
 			err = ErrEncodePattern(err)
@@ -1452,8 +1452,8 @@ func (h *Handler) GetMesheryPatternHandler(
 	}
 
 	// deprettify pattern for backward compatibility with older designs which had the configuration in prettified format
-	var design patternV1beta1.PatternFile
-	err = encoding.Unmarshal([]byte(pattern.PatternFile), &design)
+	var designPattern design.PatternFile
+	err = encoding.Unmarshal([]byte(pattern.PatternFile), &designPattern)
 
 	if err != nil {
 		err = ErrParsePattern(err)
@@ -1462,11 +1462,11 @@ func (h *Handler) GetMesheryPatternHandler(
 		return
 	}
 
-	for _, component := range design.Components {
+	for _, component := range designPattern.Components {
 		component.Configuration = patterncore.Format.DePrettify(component.Configuration, false)
 	}
 
-	patternBytes, err := encoding.Marshal(design)
+	patternBytes, err := encoding.Marshal(designPattern)
 	pattern.PatternFile = string(patternBytes)
 	// done deprettifying
 
@@ -1755,11 +1755,11 @@ func createArtifactHubPkg(pattern *models.MesheryPattern, user string) ([]byte, 
 	return data, nil
 }
 
-func (h *Handler) convertV1alpha2ToV1beta1(mesheryPattern *models.MesheryPattern, eventBuilder *events.EventBuilder) (*patternV1beta1.PatternFile, string, error) {
+func (h *Handler) convertV1alpha2ToV1beta1(mesheryPattern *models.MesheryPattern, eventBuilder *events.EventBuilder) (*design.PatternFile, string, error) {
 
 	v1alpha1PatternFile := v1alpha2.PatternFile{}
 
-	v1beta1PatternFile := patternV1beta1.PatternFile{}
+	v1beta1PatternFile := design.PatternFile{}
 
 	err := encoding.Unmarshal([]byte(mesheryPattern.PatternFile), &v1alpha1PatternFile)
 	if err != nil {
@@ -1796,7 +1796,7 @@ func (h *Handler) convertV1alpha2ToV1beta1(mesheryPattern *models.MesheryPattern
 	return &v1beta1PatternFile, string(v1beta1PatternByt), nil
 }
 
-func mapModelRelatedData(reg *meshmodel.RegistryManager, patternFile *patternV1beta1.PatternFile) error {
+func mapModelRelatedData(reg *meshmodel.RegistryManager, patternFile *design.PatternFile) error {
 	s := selector.New(reg)
 	for _, comp := range patternFile.Components {
 		if comp == nil {
@@ -1855,12 +1855,12 @@ func mapModelRelatedData(reg *meshmodel.RegistryManager, patternFile *patternV1b
 		comp.Metadata.IsAnnotation = wc.Metadata.IsAnnotation
 		comp.Metadata.Published = wc.Metadata.Published
 
-		var styles component.Styles
+		var styles core.ComponentStyles
 
 		if comp.Styles != nil {
 			styles = *comp.Styles
 		} else {
-			comp.Styles = &component.Styles{}
+			comp.Styles = &core.ComponentStyles{}
 		}
 
 		// Assign the other styles and reassign the position.
