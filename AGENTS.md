@@ -30,8 +30,12 @@ performance management, and multi-tenancy capabilities across any cloud or on-pr
 
 This repository adheres to the canonical camelCase-wire identifier-naming contract
 defined authoritatively in `meshery/schemas/AGENTS.md § Casing rules at a
-glance`. The contract is **not optional**; deviations block PRs via the
-schemas consumer-audit CI gate.
+glance`. The contract is **not optional**; deviations should be treated as
+repository policy and corrected before review or merge. The cross-repo
+consumer-audit gate lives in `meshery/schemas` and will flag divergence
+in this repo's server handlers and UI slices when Phase 2 and Phase 3 of
+the migration plan land — see `meshery/schemas/.github/workflows/schema-audit.yml`
+for the authoritative CI job.
 
 ### The rule in one sentence
 
@@ -45,7 +49,7 @@ idiom; the ORM layer is the sole translation boundary.*
 | DB column / `db:` tag | `snake_case` — `user_id`, `org_id`, `created_at` |
 | Go struct field | `PascalCase` with Go-idiomatic initialisms — `UserID`, `OrgID`, `CreatedAt` |
 | JSON tag | `camelCase` — `json:"userId"`, `json:"orgId"`, `json:"createdAt"` |
-| URL query/path param | `camelCase + Id` — `{orgId}`, `?userId=...` |
+| URL query/path param | `camelCase` — `{orgId}`, `?userId=...` |
 | TypeScript property | `camelCase` — `response.userId`, `queryArg.orgId` |
 | OpenAPI schema property | `camelCase` |
 | OpenAPI `operationId` | `lower camelCase verbNoun` — `getWorkspaces` |
@@ -63,7 +67,7 @@ idiom; the ORM layer is the sole translation boundary.*
   TypeScript properties. `Id` (camelCase) is canonical.
 - MUST NOT mix casing conventions within a single resource. If wire
   format must change, introduce a new API version per
-  `schemas/AGENTS.md § Dual-Schema Pattern`.
+  `meshery/schemas/AGENTS.md § Dual-Schema Pattern`.
 - MUST NOT import deprecated legacy schema versions in new code. When
   importing from `@meshery/schemas`, consume the latest canonical-casing
   version (v1beta3 where present, otherwise v1beta2). Deprecated
@@ -73,8 +77,12 @@ idiom; the ORM layer is the sole translation boundary.*
 
 ### Required on every PR
 
-- MUST run the schemas validator locally before pushing:
-  `cd ../schemas && make validate-schemas && make consumer-audit`.
+- MUST run the schemas validator locally before pushing. This command
+  assumes `meshery` and `schemas` are checked out as sibling directories
+  (for example, `../meshery` and `../schemas`):
+  `cd ../schemas && make validate-schemas && make consumer-audit`. If
+  `meshery/schemas` is cloned elsewhere, run the same targets from that
+  checkout instead — e.g. `cd /path/to/schemas && make validate-schemas && make consumer-audit`.
 - MUST include test updates for any casing or tag change.
 - MUST include doc updates for any user-visible API change.
 - MUST sign off commits (`git commit -s`).
