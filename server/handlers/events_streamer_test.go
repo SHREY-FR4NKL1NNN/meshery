@@ -3,6 +3,10 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"reflect"
+	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,11 +16,70 @@ import (
 )
 
 type testFlusher struct {
-	flushes int
+	flushes atomic.Int32
+	flushCh chan struct{}
 }
 
 func (f *testFlusher) Flush() {
-	f.flushes++
+	f.flushes.Add(1)
+	if f.flushCh != nil {
+		select {
+		case f.flushCh <- struct{}{}:
+		default:
+		}
+	}
+}
+
+type safeBuffer struct {
+	mu      sync.Mutex
+	buf     bytes.Buffer
+	writeCh chan struct{}
+}
+
+func (b *safeBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	n, err := b.buf.Write(p)
+	if b.writeCh != nil {
+		select {
+		case b.writeCh <- struct{}{}:
+		default:
+		}
+	}
+
+	return n, err
+}
+
+func (b *safeBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	return b.buf.String()
+}
+
+func waitForSignal(t *testing.T, ch <-chan struct{}, name string) {
+	t.Helper()
+
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for %s", name)
+	}
+}
+
+func waitForSubscription(t *testing.T, eb *_events.EventStreamer) {
+	t.Helper()
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if reflect.ValueOf(eb).Elem().FieldByName("clientChannels").Len() > 0 {
+			return
+		}
+		runtime.Gosched()
+	}
+
+	t.Fatal("timed out waiting for event streamer subscription")
 }
 
 func TestSendStreamEvent(t *testing.T) {
@@ -88,32 +151,27 @@ func TestWriteEventStream_StopsOnContextCancellation(t *testing.T) {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
-	respChan := make(chan []byte)
-	flusher := &testFlusher{}
-	var body bytes.Buffer
+	respChan := make(chan []byte, 1)
+	flusher := &testFlusher{flushCh: make(chan struct{}, 1)}
+	body := &safeBuffer{writeCh: make(chan struct{}, 1)}
 	done := make(chan struct{})
 
 	go func() {
-		writeEventStream(ctx, &body, respChan, log, flusher)
+		writeEventStream(ctx, body, respChan, log, flusher)
 		close(done)
 	}()
 
 	respChan <- []byte(`{"status":"ok"}`)
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if body.String() == "data: {\"status\":\"ok\"}\n\n" {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForSignal(t, body.writeCh, "stream write")
+	waitForSignal(t, flusher.flushCh, "flush")
 
 	if body.String() != "data: {\"status\":\"ok\"}\n\n" {
 		t.Fatalf("unexpected stream output: %q", body.String())
 	}
 
-	if flusher.flushes != 1 {
-		t.Fatalf("expected flusher to be called once, got %d", flusher.flushes)
+	if flusher.flushes.Load() != 1 {
+		t.Fatalf("expected flusher to be called once, got %d", flusher.flushes.Load())
 	}
 
 	cancel()
@@ -135,17 +193,20 @@ func TestListenForCoreEvents_StopsBlockedSendOnCancellation(t *testing.T) {
 	}
 
 	eb := _events.NewEventStreamer()
-	respChan := make(chan []byte)
+	respChan := make(chan []byte, 1)
+	respChan <- []byte("pre-filled to force a blocked send")
 	done := make(chan struct{})
+	started := make(chan struct{})
 
 	go func() {
+		close(started)
 		listenForCoreEvents(ctx, eb, respChan, log, nil)
 		close(done)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	<-started
+	waitForSubscription(t, eb)
 	eb.Publish(&meshes.EventsResponse{Summary: "stream event"})
-	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {
