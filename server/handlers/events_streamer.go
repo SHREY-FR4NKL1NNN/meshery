@@ -21,10 +21,6 @@ import (
 	"github.com/meshery/schemas/models/core"
 )
 
-var (
-	flusherMap map[string]http.Flusher
-)
-
 type eventStatusPayload struct {
 	Status    string       `json:"status"`
 	StatusIDs []*core.Uuid `json:"ids"`
@@ -254,17 +250,7 @@ func (h *Handler) EventStreamHandler(w http.ResponseWriter, req *http.Request, p
 	// 	return
 	// }
 
-	client := "ui"
-	if req.URL.Query().Get("client") != "" {
-		client = req.URL.Query().Get("client")
-	}
-
-	if flusherMap == nil {
-		flusherMap = make(map[string]http.Flusher, 0)
-	}
-
 	flusher, ok := w.(http.Flusher)
-	flusherMap[client] = flusher
 
 	if !ok {
 		h.log.Error(ErrEventStreamingNotSupported)
@@ -300,17 +286,7 @@ func (h *Handler) EventStreamHandler(w http.ResponseWriter, req *http.Request, p
 		h.log.Debug("new adapters channel closed")
 	}()
 	go listenForCoreEvents(req.Context(), h.EventsBuffer, respChan, h.log, p)
-	go func(flusher http.Flusher) {
-		for data := range respChan {
-			h.log.Debug("received new data on response channel")
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-			if flusher != nil {
-				flusher.Flush()
-				h.log.Debug("Flushed the messages on the wire...")
-			}
-		}
-		h.log.Debug("response channel closed")
-	}(flusherMap[client])
+	go writeEventStream(req.Context(), w, respChan, h.log, flusher)
 
 STOP:
 	for {
@@ -356,15 +332,49 @@ STOP:
 		}
 		time.Sleep(5 * time.Second)
 	}
-	close(respChan)
 	defer h.log.Debug("events handler closed")
 }
+
+func writeEventStream(ctx context.Context, w io.Writer, respChan <-chan []byte, log logger.Handler, flusher http.Flusher) {
+	for {
+		select {
+		case data, ok := <-respChan:
+			if !ok {
+				log.Debug("response channel closed")
+				return
+			}
+
+			log.Debug("received new data on response channel")
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+			if flusher != nil {
+				flusher.Flush()
+				log.Debug("Flushed the messages on the wire...")
+			}
+		case <-ctx.Done():
+			log.Debug("client disconnected, stopping flusher loop")
+			return
+		}
+	}
+}
+
+func sendStreamEvent(ctx context.Context, respChan chan<- []byte, data []byte) bool {
+	select {
+	case respChan <- data:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func listenForCoreEvents(ctx context.Context, eb *_events.EventStreamer, resp chan []byte, log logger.Handler, _ models.Provider) {
 	datach := make(chan interface{}, 10)
 	go eb.Subscribe(datach)
 	for {
 		select {
-		case datap := <-datach:
+		case datap, ok := <-datach:
+			if !ok {
+				return
+			}
 			event, ok := datap.(*meshes.EventsResponse)
 			if !ok {
 				continue
@@ -374,7 +384,9 @@ func listenForCoreEvents(ctx context.Context, eb *_events.EventStreamer, resp ch
 				log.Error(models.ErrMarshal(err, "event"))
 				continue
 			}
-			resp <- data
+			if !sendStreamEvent(ctx, resp, data) {
+				return
+			}
 
 		case <-ctx.Done():
 			return
@@ -429,7 +441,9 @@ func listenForAdapterEvents(ctx context.Context, mClient *meshes.MeshClient, res
 			log.Error(models.ErrMarshal(err, "event"))
 			return
 		}
-		respChan <- data
+		if !sendStreamEvent(ctx, respChan, data) {
+			return
+		}
 	}
 }
 
