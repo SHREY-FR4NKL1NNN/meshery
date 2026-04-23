@@ -8,20 +8,20 @@ import (
 
 func TestMeshsyncDeploymentModeFromString(t *testing.T) {
 	tests := []struct {
+		name     string
 		input    string
 		expected MeshsyncDeploymentMode
 	}{
-		{"", MeshsyncDeploymentModeUndefined},
-		{string(MeshsyncDeploymentModeOperator), MeshsyncDeploymentModeOperator},
-		{string(MeshsyncDeploymentModeEmbedded), MeshsyncDeploymentModeEmbedded},
-		{"unknown", MeshsyncDeploymentModeUndefined},
+		{name: "empty string", input: "", expected: MeshsyncDeploymentModeUndefined},
+		{name: "operator", input: string(MeshsyncDeploymentModeOperator), expected: MeshsyncDeploymentModeOperator},
+		{name: "embedded", input: string(MeshsyncDeploymentModeEmbedded), expected: MeshsyncDeploymentModeEmbedded},
+		{name: "unknown value", input: "unknown", expected: MeshsyncDeploymentModeUndefined},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			assert := assert.New(t)
+		t.Run(tt.name, func(t *testing.T) {
 			result := MeshsyncDeploymentModeFromString(tt.input)
-			assert.Equal(tt.expected, result)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -32,6 +32,11 @@ func TestMeshsyncDeploymentModeFromMetadata(t *testing.T) {
 		metadata map[string]any
 		expected MeshsyncDeploymentMode
 	}{
+		{
+			name:     "nil metadata",
+			metadata: nil,
+			expected: MeshsyncDeploymentModeUndefined,
+		},
 		{
 			name:     "no key",
 			metadata: map[string]any{},
@@ -71,9 +76,8 @@ func TestMeshsyncDeploymentModeFromMetadata(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert := assert.New(t)
 			result := MeshsyncDeploymentModeFromMetadata(tt.metadata)
-			assert.Equal(tt.expected, result)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -83,9 +87,8 @@ func TestAddMeshsyncDeploymentModeToMetadata(t *testing.T) {
 		metadata := make(map[string]any)
 		SetMeshsyncDeploymentModeToMetadata(metadata, MeshsyncDeploymentModeEmbedded)
 
-		assert := assert.New(t)
-		assert.Contains(metadata, MeshsyncDeploymentModeMetadataKey)
-		assert.Equal(MeshsyncDeploymentModeEmbedded, metadata[MeshsyncDeploymentModeMetadataKey])
+		assert.Contains(t, metadata, MeshsyncDeploymentModeMetadataKey)
+		assert.Equal(t, MeshsyncDeploymentModeEmbedded, metadata[MeshsyncDeploymentModeMetadataKey])
 	})
 
 	t.Run("overwrites existing mode in metadata", func(t *testing.T) {
@@ -94,7 +97,13 @@ func TestAddMeshsyncDeploymentModeToMetadata(t *testing.T) {
 		}
 		SetMeshsyncDeploymentModeToMetadata(metadata, MeshsyncDeploymentModeEmbedded)
 
-		assert := assert.New(t)
-		assert.Equal(MeshsyncDeploymentModeEmbedded, metadata[MeshsyncDeploymentModeMetadataKey])
+		assert.Equal(t, MeshsyncDeploymentModeEmbedded, metadata[MeshsyncDeploymentModeMetadataKey])
+	})
+
+	t.Run("nil metadata is a no-op, not a panic", func(t *testing.T) {
+		var metadata map[string]any // nil map
+		assert.NotPanics(t, func() {
+			SetMeshsyncDeploymentModeToMetadata(metadata, MeshsyncDeploymentModeEmbedded)
+		})
 	})
 }

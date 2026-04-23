@@ -10,9 +10,10 @@
 // here lets the Phase 3 consumer repoint drop every `v1beta1/connection`
 // import from meshery/meshery without waiting for a schemas-side port.
 //
-// TODO(identifier-naming-migration): Once schemas releases a v1beta3
-// connection_helper with these helpers (or an equivalent package), switch back
-// to the shared definition and delete this file.
+// Per the identifier-naming migration plan (docs/identifier-naming-migration.md
+// in meshery/schemas), Meshery-domain logic stays in meshery/meshery and the
+// schemas package remains a pure wire-contract. These helpers are intentionally
+// permanent here; schemas is not expected to re-export them.
 package connections
 
 import (
@@ -54,9 +55,12 @@ func MeshsyncDeploymentModeFromString(value string) MeshsyncDeploymentMode {
 
 // MeshsyncDeploymentModeFromMetadata extracts the deployment mode stored on
 // a connection's metadata map. Both strongly-typed (MeshsyncDeploymentMode)
-// and string-shaped values are accepted; any other type falls back to
-// MeshsyncDeploymentModeUndefined.
+// and string-shaped values are accepted; any other type (or a nil metadata
+// map) falls back to MeshsyncDeploymentModeUndefined.
 func MeshsyncDeploymentModeFromMetadata(metadata core.Map) MeshsyncDeploymentMode {
+	if metadata == nil {
+		return MeshsyncDeploymentModeUndefined
+	}
 	raw, exists := metadata[MeshsyncDeploymentModeMetadataKey]
 	if !exists {
 		return MeshsyncDeploymentModeUndefined
@@ -73,7 +77,12 @@ func MeshsyncDeploymentModeFromMetadata(metadata core.Map) MeshsyncDeploymentMod
 }
 
 // SetMeshsyncDeploymentModeToMetadata writes (or overwrites) the deployment
-// mode entry on a connection's metadata map.
+// mode entry on a connection's metadata map. A nil metadata map is a no-op
+// (writing to a nil map would panic); callers that need to set a mode on a
+// fresh connection must initialise the map first.
 func SetMeshsyncDeploymentModeToMetadata(metadata core.Map, value MeshsyncDeploymentMode) {
+	if metadata == nil {
+		return
+	}
 	metadata[MeshsyncDeploymentModeMetadataKey] = value
 }
