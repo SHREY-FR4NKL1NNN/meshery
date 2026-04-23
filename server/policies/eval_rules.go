@@ -1,6 +1,7 @@
 package policies
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -97,9 +98,50 @@ func cleanupDeletedRelationshipsActions(rels []*relationship.RelationshipDefinit
 	return actions
 }
 
+// schemaDefaultAtPath walks a component's JSON schema to return the `default`
+// declared for the field at the given configuration path. Returns (nil, false)
+// when the schema is missing, unparseable, or defines no default at that path.
+func schemaDefaultAtPath(comp *component.ComponentDefinition, path []string) (interface{}, bool) {
+	if comp == nil || comp.Component.Schema == "" {
+		return nil, false
+	}
+	var schema map[string]interface{}
+	if err := json.Unmarshal([]byte(comp.Component.Schema), &schema); err != nil {
+		return nil, false
+	}
+	segs := path
+	if len(segs) > 0 && segs[0] == "configuration" {
+		segs = segs[1:]
+	}
+	cursor := schema
+	for _, seg := range segs {
+		props, ok := cursor["properties"].(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		next, ok := props[seg].(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		cursor = next
+	}
+	def, ok := cursor["default"]
+	return def, ok
+}
+
+// cleanupActionForPath returns the reverse patch for a mutated field on delete:
+// the schema default when one is declared, otherwise a remove of the field.
+func cleanupActionForPath(mutatedID string, mutatedPath []string, mutatedComp *component.ComponentDefinition) PolicyAction {
+	if def, ok := schemaDefaultAtPath(mutatedComp, mutatedPath); ok {
+		return newComponentUpdateAction(getComponentUpdateOp(mutatedPath), mutatedID, mutatedPath, def)
+	}
+	return newComponentRemoveAction(mutatedID, mutatedPath)
+}
+
 // patchMutatorsAction creates patch actions for relationships that have mutator/mutated refs.
-// When the relationship is in StatusDeleted, it emits reverse patches (value=nil) for
-// fields that still hold the mutator's value, so deletion restores the pre-mutation state.
+// When the relationship is in StatusDeleted, it emits reverse patches (schema default when
+// declared, otherwise remove) for fields that still hold the mutator's value, so deletion
+// restores the pre-mutation state.
 func patchMutatorsAction(rel *relationship.RelationshipDefinition, design *pattern.PatternFile) []PolicyAction {
 	if rel.Selectors == nil {
 		return nil
@@ -146,16 +188,17 @@ func patchMutatorsAction(rel *relationship.RelationshipDefinition, design *patte
 			if mutatorValue == nil {
 				continue
 			}
-			value := mutatorValue
 			if reverse {
 				if !deepEqual(mutatorValue, oldValue) {
 					continue
 				}
-				value = nil
-			} else if deepEqual(mutatorValue, oldValue) {
+				actions = append(actions, cleanupActionForPath(mutatedID, mutatedRefs[i], mutatedComp))
 				continue
 			}
-			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedRefs[i]), mutatedID, mutatedRefs[i], value))
+			if deepEqual(mutatorValue, oldValue) {
+				continue
+			}
+			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedRefs[i]), mutatedID, mutatedRefs[i], mutatorValue))
 		}
 	}
 	return actions

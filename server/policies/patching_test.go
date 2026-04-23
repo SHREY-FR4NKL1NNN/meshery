@@ -902,7 +902,7 @@ func TestInventoryPatchingFullPipeline(t *testing.T) {
 }
 
 // TestWalletPatchingCleanupOnDelete verifies that deleting a wallet relationship
-// whose mutation is still in place produces a reverse patch (value=nil).
+// whose mutation is still in place produces a remove action (no schema default).
 func TestWalletPatchingCleanupOnDelete(t *testing.T) {
 	p := &HierarchicalWalletPolicy{}
 
@@ -979,17 +979,115 @@ func TestWalletPatchingCleanupOnDelete(t *testing.T) {
 
 	actions := p.SideEffects(rel, design)
 	if len(actions) == 0 {
-		t.Fatal("Expected reverse patch action on delete, got none")
+		t.Fatal("Expected reverse action on delete, got none")
 	}
 
 	found := false
 	for _, a := range actions {
-		if a.Op == UpdateComponentConfigurationOp && a.ID == podTplID.String() && a.UpdateValue == nil {
+		if a.Op == RemoveComponentConfigurationOp && a.ID == podTplID.String() {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("Expected reverse patch (nil value) on PodTemplate.serviceAccountName, got actions: %+v", actions)
+		t.Errorf("Expected remove action on PodTemplate.serviceAccountName, got actions: %+v", actions)
+	}
+}
+
+// TestWalletPatchingCleanupUsesSchemaDefault verifies that when the mutated
+// component has a schema default for the mutated path, delete restores that
+// default instead of removing the field.
+func TestWalletPatchingCleanupUsesSchemaDefault(t *testing.T) {
+	p := &HierarchicalWalletPolicy{}
+
+	deployID, _ := uuid.FromString("00000000-0000-0000-0000-000000000001")
+	podTplID, _ := uuid.FromString("00000000-0000-0000-0000-000000000002")
+
+	deploy := &component.ComponentDefinition{
+		Component:      component.Component{Kind: "Deployment"},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"serviceAccountName": "my-sa",
+					},
+				},
+			},
+		},
+	}
+	deploy.ID = deployID
+
+	podTpl := &component.ComponentDefinition{
+		Component: component.Component{
+			Kind: "PodTemplate",
+			Schema: `{
+				"properties": {
+					"spec": {
+						"properties": {
+							"serviceAccountName": {"default": "default"}
+						}
+					}
+				}
+			}`,
+		},
+		ModelReference: modelv1beta1.ModelReference{Name: "kubernetes"},
+		Configuration: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"serviceAccountName": "my-sa",
+			},
+		},
+	}
+	podTpl.ID = podTplID
+
+	design := makePatternFile([]*component.ComponentDefinition{deploy, podTpl}, nil)
+
+	mutatorRef := relationship.MutatorRef{[]string{"configuration", "spec", "template", "spec", "serviceAccountName"}}
+	mutatedRef := relationship.MutatedRef{[]string{"configuration", "spec", "serviceAccountName"}}
+	relStatus := relationship.RelationshipDefinitionStatus("deleted")
+	selectorSet := relationship.SelectorSet{
+		relationship.SelectorSetItem{
+			Allow: relationship.Selector{
+				From: []relationship.SelectorItem{
+					{
+						ID:   &deployID,
+						Kind: strPtr("Deployment"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatorRef: &mutatorRef,
+						},
+					},
+				},
+				To: []relationship.SelectorItem{
+					{
+						ID:   &podTplID,
+						Kind: strPtr("PodTemplate"),
+						RelationshipDefinitionSelectorsPatch: &relationship.RelationshipDefinitionSelectorsPatch{
+							MutatedRef: &mutatedRef,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	rel := &relationship.RelationshipDefinition{
+		Kind:             relationship.Hierarchical,
+		RelationshipType: "parent",
+		SubType:          "wallet",
+		Status:           &relStatus,
+		Model:            modelv1beta1.ModelReference{Name: "kubernetes"},
+		Selectors:        &selectorSet,
+	}
+	rel.ID, _ = uuid.FromString("00000000-0000-0000-0000-000000000010")
+
+	actions := p.SideEffects(rel, design)
+	found := false
+	for _, a := range actions {
+		if a.Op == UpdateComponentConfigurationOp && a.ID == podTplID.String() && a.UpdateValue == "default" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Expected schema default (\"default\") restore on PodTemplate.serviceAccountName, got actions: %+v", actions)
 	}
 }
 
@@ -1084,8 +1182,8 @@ func TestWalletCleanupOnDeleteFullPipeline(t *testing.T) {
 			if !ok {
 				t.Fatal("PodTemplate spec missing after evaluation")
 			}
-			if spec["serviceAccountName"] != nil {
-				t.Errorf("Expected PodTemplate.serviceAccountName to be nil after delete, got %v", spec["serviceAccountName"])
+			if _, present := spec["serviceAccountName"]; present {
+				t.Errorf("Expected PodTemplate.serviceAccountName to be removed after delete, got %v", spec["serviceAccountName"])
 			}
 			return
 		}

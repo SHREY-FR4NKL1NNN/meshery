@@ -42,8 +42,9 @@ func (p *EdgeBindingPolicy) SideEffects(rel *relationship.RelationshipDefinition
 
 // patchBindingMatchFields patches the binding component's configuration
 // using values from the match fields of the binding relationship selectors.
-// When the relationship is in StatusDeleted, it emits reverse patches (value=nil)
-// so deletion restores the pre-mutation state.
+// When the relationship is in StatusDeleted, it emits reverse patches (schema
+// default when declared, otherwise remove) so deletion restores the
+// pre-mutation state.
 func patchBindingMatchFields(rel *relationship.RelationshipDefinition, design *pattern.PatternFile) []PolicyAction {
 	if rel.Selectors == nil {
 		return nil
@@ -73,7 +74,8 @@ func patchBindingMatchFields(rel *relationship.RelationshipDefinition, design *p
 }
 
 // patchBindingMatchFieldsForSelector processes match fields for a single selector.
-// If reverse is true, emits nil-valued patches for fields that still hold the mutator's value.
+// If reverse is true, emits cleanup patches (schema default or remove) for fields
+// that still hold the mutator's value.
 func patchBindingMatchFieldsForSelector(match *relationship.MatchSelector, _ *component.ComponentDefinition, design *pattern.PatternFile, reverse bool) []PolicyAction {
 	var actions []PolicyAction
 
@@ -122,16 +124,17 @@ func patchBindingMatchFieldsForSelector(match *relationship.MatchSelector, _ *co
 			if mutatorValue == nil {
 				continue
 			}
-			value := mutatorValue
 			if reverse {
 				if !deepEqual(mutatorValue, oldValue) {
 					continue
 				}
-				value = nil
-			} else if deepEqual(mutatorValue, oldValue) {
+				actions = append(actions, cleanupActionForPath(otherComp.ID.String(), mutatedPath, otherComp))
 				continue
 			}
-			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedPath), otherComp.ID.String(), mutatedPath, value))
+			if deepEqual(mutatorValue, oldValue) {
+				continue
+			}
+			actions = append(actions, newComponentUpdateAction(getComponentUpdateOp(mutatedPath), otherComp.ID.String(), mutatedPath, mutatorValue))
 		}
 	}
 	return actions
