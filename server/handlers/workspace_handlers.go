@@ -21,7 +21,7 @@ func (h *Handler) GetWorkspacesHandler(w http.ResponseWriter, req *http.Request,
 
 	q := req.URL.Query()
 
-	orgID := q.Get("orgID")
+	orgID := q.Get("orgId")
 	if orgID == "" {
 		h.log.Error(models.ErrWorkspaceMissingInput())
 		http.Error(w, models.ErrWorkspaceMissingInput().Error(), http.StatusBadRequest)
@@ -43,7 +43,7 @@ func (h *Handler) GetWorkspacesHandler(w http.ResponseWriter, req *http.Request,
 func (h *Handler) GetWorkspaceByIdHandler(w http.ResponseWriter, r *http.Request, _ *models.Preference, _ *models.User, provider models.Provider) {
 	workspaceID := mux.Vars(r)["id"]
 	q := r.URL.Query()
-	orgID := q.Get("orgID")
+	orgID := q.Get("orgId")
 	if orgID == "" {
 		h.log.Error(models.ErrWorkspaceMissingInput())
 		http.Error(w, models.ErrWorkspaceMissingInput().Error(), http.StatusBadRequest)

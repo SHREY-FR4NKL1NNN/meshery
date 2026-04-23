@@ -617,5 +617,5 @@ func ErrMeshsyncDataHandler(err error) error {
 }
 
 func ErrWorkspaceMissingInput() error {
-	return errors.New(ErrWorkspaceMissingInputCode, errors.Alert, []string{"Invalid input for workspace operation"}, []string{"WorkspaceID or OrgID cannot be empty"}, []string{"The workspace ID and organization ID are required for this operation."}, []string{"Ensure that both WorkspaceID and OrgID are provided and not empty."})
+	return errors.New(ErrWorkspaceMissingInputCode, errors.Alert, []string{"Invalid input for workspace operation"}, []string{"workspaceId or orgId cannot be empty"}, []string{"The workspace ID and organization ID are required for this operation."}, []string{"Ensure that both workspaceId and orgId are provided and not empty."})
 }
