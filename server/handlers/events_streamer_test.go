@@ -3,8 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"reflect"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +12,8 @@ import (
 	"github.com/meshery/meshkit/logger"
 	_events "github.com/meshery/meshkit/utils/events"
 )
+
+const testTimeout = time.Second
 
 type testFlusher struct {
 	flushes atomic.Int32
@@ -63,23 +63,9 @@ func waitForSignal(t *testing.T, ch <-chan struct{}, name string) {
 
 	select {
 	case <-ch:
-	case <-time.After(time.Second):
+	case <-time.After(testTimeout):
 		t.Fatalf("timed out waiting for %s", name)
 	}
-}
-
-func waitForSubscription(t *testing.T, eb *_events.EventStreamer) {
-	t.Helper()
-
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if reflect.ValueOf(eb).Elem().FieldByName("clientChannels").Len() > 0 {
-			return
-		}
-		runtime.Gosched()
-	}
-
-	t.Fatal("timed out waiting for event streamer subscription")
 }
 
 func TestSendStreamEvent(t *testing.T) {
@@ -135,7 +121,7 @@ func TestSendStreamEvent(t *testing.T) {
 				if string(got) != string(tt.expectValue) {
 					t.Fatalf("expected %q, got %q", tt.expectValue, got)
 				}
-			case <-time.After(time.Second):
+			case <-time.After(testTimeout):
 				t.Fatal("timed out waiting for streamed payload")
 			}
 		})
@@ -178,7 +164,7 @@ func TestWriteEventStream_StopsOnContextCancellation(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("writeEventStream did not stop after context cancellation")
 	}
 }
@@ -196,22 +182,28 @@ func TestListenForCoreEvents_StopsBlockedSendOnCancellation(t *testing.T) {
 	respChan := make(chan []byte, 1)
 	respChan <- []byte("pre-filled to force a blocked send")
 	done := make(chan struct{})
-	started := make(chan struct{})
+	subscribed := make(chan struct{}, 1)
+	originalSubscribe := subscribeToEventStream
+	subscribeToEventStream = func(eb *_events.EventStreamer, ch chan interface{}) {
+		originalSubscribe(eb, ch)
+		subscribed <- struct{}{}
+	}
+	defer func() {
+		subscribeToEventStream = originalSubscribe
+	}()
 
 	go func() {
-		close(started)
 		listenForCoreEvents(ctx, eb, respChan, log, nil)
 		close(done)
 	}()
 
-	<-started
-	waitForSubscription(t, eb)
+	waitForSignal(t, subscribed, "event streamer subscription")
 	eb.Publish(&meshes.EventsResponse{Summary: "stream event"})
 	cancel()
 
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(2 * testTimeout):
 		t.Fatal("listenForCoreEvents remained blocked after cancellation")
 	}
 }

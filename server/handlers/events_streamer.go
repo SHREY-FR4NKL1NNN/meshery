@@ -21,6 +21,10 @@ import (
 	"github.com/meshery/schemas/models/core"
 )
 
+var subscribeToEventStream = func(eb *_events.EventStreamer, ch chan interface{}) {
+	eb.Subscribe(ch)
+}
+
 type eventStatusPayload struct {
 	Status    string       `json:"status"`
 	StatusIDs []*core.Uuid `json:"ids"`
@@ -368,7 +372,7 @@ func sendStreamEvent(ctx context.Context, respChan chan<- []byte, data []byte) b
 
 func listenForCoreEvents(ctx context.Context, eb *_events.EventStreamer, resp chan []byte, log logger.Handler, _ models.Provider) {
 	datach := make(chan interface{}, 10)
-	go eb.Subscribe(datach)
+	go subscribeToEventStream(eb, datach)
 	for {
 		select {
 		case datap, ok := <-datach:
