@@ -140,5 +140,12 @@ func ApplyV1beta3MetadataChanges(
 		return
 	}
 	dst.Configuration = src.Configuration
-	dst.Metadata.AdditionalProperties = src.Metadata.AdditionalProperties
+	// v1beta2/componentv1beta2.ComponentDefinition.Metadata and v1beta3's
+	// Metadata are structurally identical (same package-level type across
+	// the two generated schemas), so a direct conversion copies every
+	// field — AdditionalProperties, Published, IsAnnotation, IsNamespaced,
+	// Genealogy, Shape, SvgColor, etc. — rather than leaving new fields
+	// out of sync between the registry-hydrated v1beta3 and the pattern-
+	// level v1beta2 components.
+	dst.Metadata = componentv1beta2.ComponentDefinition_Metadata(src.Metadata)
 }

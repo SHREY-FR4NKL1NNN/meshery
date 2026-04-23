@@ -373,11 +373,18 @@ func (h *Handler) GetMeshSyncResources(rw http.ResponseWriter, r *http.Request, 
 	// evaluation engine carve-out). Bridge via JSON round-trip just for
 	// the dehydrate call, then fold the dehydrated fields back onto the
 	// v1beta1 value so the response envelope keeps its existing wire shape.
+	// Log bridge/round-trip errors instead of silently swallowing them —
+	// a failure here means the response goes out un-dehydrated (potentially
+	// carrying extra configuration payload) and that is worth observing.
 	if bridged, bridgeErr := patternutils.PatternV1beta1ToV1beta3(&design); bridgeErr == nil && bridged != nil {
 		patterns.DehydratePattern(bridged)
 		if roundtripped, rtErr := patternutils.PatternV1beta3ToV1beta1(bridged); rtErr == nil && roundtripped != nil {
 			design = *roundtripped
+		} else if rtErr != nil {
+			h.log.Warn(fmt.Errorf("meshsync: v1beta3→v1beta1 dehydrate round-trip failed: %w; response will not be dehydrated", rtErr))
 		}
+	} else if bridgeErr != nil {
+		h.log.Warn(fmt.Errorf("meshsync: v1beta1→v1beta3 dehydrate bridge failed: %w; response will not be dehydrated", bridgeErr))
 	}
 
 	response := &models.MeshSyncResourcesAPIResponse{

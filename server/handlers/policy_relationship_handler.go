@@ -293,6 +293,8 @@ func (h *Handler) EvaluateDesign(
 		}
 		if roundtripped, rtErr := utils.PatternV1beta3ToV1beta1(bridged); rtErr == nil && roundtripped != nil {
 			relationshipPolicyEvalPayload.Design = *roundtripped
+		} else if rtErr != nil {
+			h.log.Warnf("failed v1beta3→v1beta1 round-trip after Hydrate; evaluation will proceed against the pre-hydration design: %v", rtErr)
 		}
 	} else if bridgeErr != nil {
 		h.log.Warnf("failed to bridge pattern for evaluation: %v", bridgeErr)
@@ -383,6 +385,8 @@ func (h *Handler) EvaluateDesign(
 		patternHelpers.DehydratePattern(bridged)
 		if roundtripped, rtErr := utils.PatternV1beta3ToV1beta1(bridged); rtErr == nil && roundtripped != nil {
 			lastEvaluationResponse.Design = *roundtripped
+		} else if rtErr != nil {
+			h.log.Warnf("failed v1beta3→v1beta1 round-trip after Dehydrate; response will ship un-dehydrated: %v", rtErr)
 		}
 	} else if bridgeErr != nil {
 		h.log.Warnf("failed to bridge pattern for dehydration: %v", bridgeErr)
