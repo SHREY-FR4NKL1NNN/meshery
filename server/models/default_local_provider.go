@@ -31,7 +31,7 @@ import (
 	"github.com/meshery/meshkit/utils/walker"
 	"github.com/meshery/schemas/models/v1beta1/environment"
 	"github.com/meshery/schemas/models/v1beta2/organization"
-	"github.com/meshery/schemas/models/v1beta1/pattern"
+	pattern "github.com/meshery/schemas/models/v1beta3/design"
 	"github.com/meshery/schemas/models/v1beta1/workspace"
 	"github.com/oapi-codegen/runtime/types"
 	"github.com/pkg/errors"

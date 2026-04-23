@@ -39,9 +39,9 @@ import (
 	regv1beta1 "github.com/meshery/meshkit/models/meshmodel/registry/v1beta1"
 	"github.com/meshery/schemas/models/core"
 	"github.com/meshery/schemas/models/v1alpha2"
-	"github.com/meshery/schemas/models/v1beta1/component"
 	"github.com/meshery/schemas/models/v1beta1/connection"
-	patternV1beta1 "github.com/meshery/schemas/models/v1beta1/pattern"
+	"github.com/meshery/schemas/models/v1beta2/component"
+	design "github.com/meshery/schemas/models/v1beta3/design"
 	"gopkg.in/yaml.v3"
 )
 
@@ -68,7 +68,7 @@ type MesheryPatternUPDATERequestBody struct {
 type DesignPostPayload struct {
 	ID         *core.Uuid               `json:"id,omitempty"`
 	Name       string                     `json:"name,omitempty"`
-	DesignFile patternV1beta1.PatternFile `json:"design_file"`
+	DesignFile design.PatternFile `json:"design_file"`
 	// Meshery doesn't have the user id fields
 	// but the remote provider is allowed to provide one
 	UserID      *string              `json:"user_id"`
@@ -737,7 +737,7 @@ func (h *Handler) DownloadMesheryPatternHandler(
 	if isOldFormat {
 
 		eventBuilder := events.NewEvent().ActedUpon(*pattern.ID).FromSystem(*h.SystemID).FromUser(userID).WithCategory("pattern").WithAction("convert")
-		_, patternFileStr, err := h.convertV1alpha2ToV1beta1(pattern, eventBuilder)
+		_, patternFileStr, err := h.convertV1alpha2ToV1beta3(pattern, eventBuilder)
 		event := eventBuilder.Build()
 		_ = provider.PersistEvent(*event, token)
 		go h.config.EventBroadcaster.Publish(userID, event)
@@ -814,9 +814,9 @@ func (h *Handler) DownloadMesheryPatternHandler(
 			}
 		}()
 
-		var design patternV1beta1.PatternFile
+		var designPattern design.PatternFile
 
-		err = encoding.Unmarshal([]byte(pattern.PatternFile), &design)
+		err = encoding.Unmarshal([]byte(pattern.PatternFile), &designPattern)
 
 		if err != nil {
 
@@ -832,7 +832,7 @@ func (h *Handler) DownloadMesheryPatternHandler(
 			return
 		}
 
-		ymlDesign, err := yaml.Marshal(design)
+		ymlDesign, err := yaml.Marshal(designPattern)
 
 		if err != nil {
 			err = ErrEncodePattern(err)
@@ -1143,7 +1143,7 @@ func (h *Handler) CloneMesheryPatternHandler(
 
 	if isOldFormat {
 		eventBuilder := events.NewEvent().ActedUpon(*pattern.ID).FromSystem(*h.SystemID).FromUser(userID).WithCategory("pattern").WithAction("convert")
-		_, patternFileStr, err := h.convertV1alpha2ToV1beta1(pattern, eventBuilder)
+		_, patternFileStr, err := h.convertV1alpha2ToV1beta3(pattern, eventBuilder)
 		event := eventBuilder.Build()
 		_ = provider.PersistEvent(*event, token)
 		go h.config.EventBroadcaster.Publish(userID, event)
@@ -1159,7 +1159,7 @@ func (h *Handler) CloneMesheryPatternHandler(
 			http.Error(rw, ErrSavePattern(err).Error(), http.StatusInternalServerError)
 
 			event := eventBuilder.WithSeverity(events.Error).WithMetadata(map[string]interface{}{
-				"error": ErrSavePattern(_errors.Wrapf(err, "failed to persist converted v1beta1 design file \"%s\" with id: %s", parsedBody.Name, patternID)),
+				"error": ErrSavePattern(_errors.Wrapf(err, "failed to persist converted v1beta3 design file \"%s\" with id: %s", parsedBody.Name, patternID)),
 			}).WithDescription(ErrSavePattern(err).Error()).Build()
 
 			_ = provider.PersistEvent(*event, token)
@@ -1439,7 +1439,7 @@ func (h *Handler) GetMesheryPatternHandler(
 
 	if isOldFormat {
 		eventBuilder := events.NewEvent().ActedUpon(*pattern.ID).FromSystem(*h.SystemID).FromUser(userID).WithCategory("pattern").WithAction("convert")
-		_, patternFileStr, err := h.convertV1alpha2ToV1beta1(pattern, eventBuilder)
+		_, patternFileStr, err := h.convertV1alpha2ToV1beta3(pattern, eventBuilder)
 		event := eventBuilder.Build()
 		_ = provider.PersistEvent(*event, token)
 		go h.config.EventBroadcaster.Publish(userID, event)
@@ -1452,8 +1452,8 @@ func (h *Handler) GetMesheryPatternHandler(
 	}
 
 	// deprettify pattern for backward compatibility with older designs which had the configuration in prettified format
-	var design patternV1beta1.PatternFile
-	err = encoding.Unmarshal([]byte(pattern.PatternFile), &design)
+	var designPattern design.PatternFile
+	err = encoding.Unmarshal([]byte(pattern.PatternFile), &designPattern)
 
 	if err != nil {
 		err = ErrParsePattern(err)
@@ -1462,11 +1462,11 @@ func (h *Handler) GetMesheryPatternHandler(
 		return
 	}
 
-	for _, component := range design.Components {
+	for _, component := range designPattern.Components {
 		component.Configuration = patterncore.Format.DePrettify(component.Configuration, false)
 	}
 
-	patternBytes, err := encoding.Marshal(design)
+	patternBytes, err := encoding.Marshal(designPattern)
 	pattern.PatternFile = string(patternBytes)
 	// done deprettifying
 
@@ -1755,11 +1755,11 @@ func createArtifactHubPkg(pattern *models.MesheryPattern, user string) ([]byte, 
 	return data, nil
 }
 
-func (h *Handler) convertV1alpha2ToV1beta1(mesheryPattern *models.MesheryPattern, eventBuilder *events.EventBuilder) (*patternV1beta1.PatternFile, string, error) {
+func (h *Handler) convertV1alpha2ToV1beta3(mesheryPattern *models.MesheryPattern, eventBuilder *events.EventBuilder) (*design.PatternFile, string, error) {
 
 	v1alpha1PatternFile := v1alpha2.PatternFile{}
 
-	v1beta1PatternFile := patternV1beta1.PatternFile{}
+	v1beta3PatternFile := design.PatternFile{}
 
 	err := encoding.Unmarshal([]byte(mesheryPattern.PatternFile), &v1alpha1PatternFile)
 	if err != nil {
@@ -1771,32 +1771,32 @@ func (h *Handler) convertV1alpha2ToV1beta1(mesheryPattern *models.MesheryPattern
 		svc.Traits = helpers.RecursiveCastMapStringInterfaceToMapStringInterface(svc.Traits)
 	}
 
-	err = v1beta1PatternFile.ConvertFrom(&v1alpha1PatternFile)
+	err = v1beta3PatternFile.ConvertFrom(&v1alpha1PatternFile)
 	if err != nil {
 		return nil, "", err
 	}
 
-	v1beta1PatternFile.ID = *mesheryPattern.ID
-	v1beta1PatternFile.Version = v1alpha1PatternFile.Version
+	v1beta3PatternFile.ID = *mesheryPattern.ID
+	v1beta3PatternFile.Version = v1alpha1PatternFile.Version
 
-	h.log.Infof("Converted design file with id \"%s\" to v1beta1 format", *mesheryPattern.ID)
+	h.log.Infof("Converted design file with id \"%s\" to v1beta3 format", *mesheryPattern.ID)
 
-	err = mapModelRelatedData(h.registryManager, &v1beta1PatternFile)
+	err = mapModelRelatedData(h.registryManager, &v1beta3PatternFile)
 	if err != nil {
-		eventBuilder.WithDescription("Design converted to v1beta1 format but failed to assign styles and metadata").
+		eventBuilder.WithDescription("Design converted to v1beta3 format but failed to assign styles and metadata").
 			WithMetadata(map[string]interface{}{"error": ErrGetComponentDefinition(err), "id": *mesheryPattern.ID}).WithSeverity(events.Warning)
 		return nil, "", err
 	}
 
-	v1beta1PatternByt, err := encoding.Marshal(v1beta1PatternFile)
+	v1beta3PatternByt, err := encoding.Marshal(v1beta3PatternFile)
 	if err != nil {
 		return nil, "", utils.ErrMarshal(err)
 	}
-	eventBuilder.WithSeverity(events.Informational).WithDescription(fmt.Sprintf("Converted design file \"%s\" with id \"%s\" to v1beta1 format", mesheryPattern.Name, *mesheryPattern.ID))
-	return &v1beta1PatternFile, string(v1beta1PatternByt), nil
+	eventBuilder.WithSeverity(events.Informational).WithDescription(fmt.Sprintf("Converted design file \"%s\" with id \"%s\" to v1beta3 format", mesheryPattern.Name, *mesheryPattern.ID))
+	return &v1beta3PatternFile, string(v1beta3PatternByt), nil
 }
 
-func mapModelRelatedData(reg *meshmodel.RegistryManager, patternFile *patternV1beta1.PatternFile) error {
+func mapModelRelatedData(reg *meshmodel.RegistryManager, patternFile *design.PatternFile) error {
 	s := selector.New(reg)
 	for _, comp := range patternFile.Components {
 		if comp == nil {
@@ -1855,12 +1855,12 @@ func mapModelRelatedData(reg *meshmodel.RegistryManager, patternFile *patternV1b
 		comp.Metadata.IsAnnotation = wc.Metadata.IsAnnotation
 		comp.Metadata.Published = wc.Metadata.Published
 
-		var styles component.Styles
+		var styles core.ComponentStyles
 
 		if comp.Styles != nil {
 			styles = *comp.Styles
 		} else {
-			comp.Styles = &component.Styles{}
+			comp.Styles = &core.ComponentStyles{}
 		}
 
 		// Assign the other styles and reassign the position.
