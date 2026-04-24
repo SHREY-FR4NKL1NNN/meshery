@@ -339,8 +339,14 @@ func (h *Handler) DesignFileImportHandler(
 	// the request — leaving it unset should preserve whatever name the
 	// import pipeline parsed out of the source file (e.g. `metadata.name`
 	// from a design YAML, or the derived name from a Kubernetes manifest).
+	// Fall back to the filename (without extension) when neither the caller
+	// nor the conversion produced a name.
 	if variant.Name != "" {
 		design.Name = variant.Name
+	} else if design.Name == "" {
+		if name := pCore.DesignNameFromFileName(fileToImport.FileName); name != "" {
+			design.Name = name
+		}
 	}
 	patternFile, err := encoding.Marshal(design)
 
