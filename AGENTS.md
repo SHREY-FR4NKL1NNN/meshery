@@ -28,6 +28,8 @@ performance management, and multi-tenancy capabilities across any cloud or on-pr
 
 ## Identifier Naming Conventions — MANDATORY
 
+Full canonical directory: <https://github.com/meshery/schemas/blob/master/docs/identifier-naming-contributor-guide.md> — the reader-friendly 26-row naming table with before/after and do/don't examples. The inline per-layer forms below remain the repo-scoped authority; the guide is the ecosystem-wide reference.
+
 This repository adheres to the canonical camelCase-wire identifier-naming contract
 defined authoritatively in `meshery/schemas/AGENTS.md § Casing rules at a
 glance`. The contract is **not optional**; deviations should be treated as
