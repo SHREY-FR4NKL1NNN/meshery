@@ -322,7 +322,7 @@ func (h *Handler) KubernetesPingHandler(w http.ResponseWriter, req *http.Request
 		}
 		return
 	}
-	http.Error(w, "Empty contextID. Pass the context ID(in query parameter \"context\") of the kuberenetes to be pinged", http.StatusBadRequest)
+	http.Error(w, "Empty connection ID. Pass the connection ID of the kubernetes context to be pinged in the canonical query parameter \"connectionId\" (the legacy \"connection_id\" spelling is also accepted during the Phase 2 deprecation window).", http.StatusBadRequest)
 }
 
 func (h *Handler) K8sRegistrationHandler(w http.ResponseWriter, req *http.Request, _ *models.Preference, user *models.User, provider models.Provider) {
