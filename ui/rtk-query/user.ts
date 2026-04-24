@@ -112,16 +112,33 @@ export const userApi = api
       getUserProfileSummaryById: builder.query({
         query: (queryArg) => ({
           url: `/api/user/profile/${queryArg.id}`,
+          // Some upstream error paths return plain text (e.g. "user not found").
+          // Parse JSON on success but fall back to raw text for errors so RTK
+          // Query surfaces a typed error object instead of a SyntaxError at
+          // runtime.
+          responseHandler: async (response) => {
+            const text = await response.text();
+            if (!response.ok) {
+              return text;
+            }
+            try {
+              return JSON.parse(text);
+            } catch {
+              return text;
+            }
+          },
         }),
         transformResponse: (response) => {
-          // Modify the response data to keep only necessary fields
+          if (!response || typeof response !== 'object') {
+            return undefined;
+          }
           return {
             id: response.id,
-            email: response?.email,
-            user_id: response?.user_id,
-            avatar_url: response?.avatar_url,
-            first_name: response?.first_name,
-            last_name: response?.last_name,
+            email: response.email,
+            user_id: response.user_id,
+            avatar_url: response.avatar_url,
+            first_name: response.first_name,
+            last_name: response.last_name,
           };
         },
       }),
@@ -256,12 +273,14 @@ export const {
   useGetUserProfileSummaryByIdQuery,
 } = userApi;
 
-export const useGetUserByIdQuery = (id, options) =>
+export const useGetUserByIdQuery = (id, options = {}) =>
   useGetUserProfileSummaryByIdQuery(
     {
       id,
     },
-    options,
+    // Falsy id would hit the server with an empty/invalid UUID and surface a 400;
+    // skipping preserves the handler's input contract.
+    { skip: !id, ...options },
   );
 
 export const useGetUsersForOrgQuery = (queryArg, options) =>
