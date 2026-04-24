@@ -30,6 +30,15 @@ func defaultSubscribeToEventStream(eb *_events.EventStreamer, ch chan interface{
 	eb.Subscribe(ch)
 }
 
+// eventStreamDrainTimeout bounds how long listenForCoreEvents keeps draining
+// its subscriber channel after Unsubscribe. meshkit's EventStreamer.Publish
+// snapshots the subscriber list under a mutex and then fans out sends in
+// fresh goroutines; if any of those goroutines won the scheduler race before
+// Unsubscribe ran, they will still try to send into our now-unused channel
+// and block forever without a reader. Draining on exit absorbs that in-flight
+// traffic; the timeout keeps the handler from waiting on an idle publisher.
+const eventStreamDrainTimeout = 100 * time.Millisecond
+
 type eventStatusPayload struct {
 	Status    string       `json:"status"`
 	StatusIDs []*core.Uuid `json:"ids"`
@@ -398,6 +407,21 @@ func listenForCoreEvents(ctx context.Context, eb *_events.EventStreamer, resp ch
 	// left a window in which early Publish calls could be dropped.
 	datach := make(chan interface{}, 10)
 	subscribe(eb, datach)
+	defer func() {
+		eb.Unsubscribe(datach)
+		// Drain any sender goroutines already past Publish's snapshot of
+		// the subscriber list. Bounded by drainTimeout so we never block
+		// the handler's return if the publisher is idle.
+		drainTimer := time.NewTimer(eventStreamDrainTimeout)
+		defer drainTimer.Stop()
+		for {
+			select {
+			case <-datach:
+			case <-drainTimer.C:
+				return
+			}
+		}
+	}()
 	for {
 		select {
 		case datap, ok := <-datach:
