@@ -100,6 +100,8 @@
   {{ $resolvedLabel := $baseLabel }}
   {{ if gt (index $baseTagLabelCounts $baseLabel | default 0) 1 }}
     {{ $parts := split $tagName "_" }}
+    {{ $suffixParts := after 1 $parts }}
+    {{ $suffixLabel := delimit $suffixParts " " }}
     {{ if ne $suffixLabel "" }}
       {{ $suffixLabel = $suffixLabel | title }}
     {{ end }}
