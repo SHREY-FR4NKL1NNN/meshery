@@ -50,11 +50,16 @@ const DesignViewListItem = ({
   // the design/view, so prefer the embedded fields and only fall back to the
   // per-row lookup when they are missing. This also avoids N extra requests
   // when rendering a page of results.
+  //
+  // user_id is required too — without it the downstream profile-link href
+  // would resolve to /user/undefined. If it's missing we let the query run
+  // (or be skipped by the guard below) rather than render a broken link.
   const hasEmbeddedUser = Boolean(
-    selectedItem?.first_name ||
-    selectedItem?.last_name ||
-    selectedItem?.avatar_url ||
-    selectedItem?.email,
+    selectedItem?.user_id &&
+    (selectedItem?.first_name ||
+      selectedItem?.last_name ||
+      selectedItem?.avatar_url ||
+      selectedItem?.email),
   );
   const { data: fetchedUserData, isLoading: isUserLoading } = useGetUserProfileSummaryByIdQuery(
     { id: selectedItem?.user_id },

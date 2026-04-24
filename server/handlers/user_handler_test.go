@@ -31,7 +31,7 @@ func (m *userSpyProvider) GetUserByID(_ *http.Request, _ string) ([]byte, error)
 func TestGetUserByIDHandler_InvalidUUIDReturnsJSON(t *testing.T) {
 	h := newTestHandler(t, map[string]models.Provider{}, "")
 	provider := &userSpyProvider{DefaultLocalProvider: &models.DefaultLocalProvider{}}
-	provider.DefaultLocalProvider.Initialize()
+	provider.Initialize()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/user/profile/not-a-uuid", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "not-a-uuid"})
@@ -52,7 +52,7 @@ func TestGetUserByIDHandler_InvalidUUIDReturnsJSON(t *testing.T) {
 func TestGetUserByIDHandler_ProviderErrorReturnsJSON(t *testing.T) {
 	h := newTestHandler(t, map[string]models.Provider{}, "")
 	provider := &userSpyProvider{DefaultLocalProvider: &models.DefaultLocalProvider{}, err: fmt.Errorf("remote blew up")}
-	provider.DefaultLocalProvider.Initialize()
+	provider.Initialize()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/user/profile/00000000-0000-0000-0000-000000000001", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "00000000-0000-0000-0000-000000000001"})
@@ -72,7 +72,7 @@ func TestGetUserByIDHandler_ProviderErrorReturnsJSON(t *testing.T) {
 func TestGetUserByIDHandler_NilRespReturnsJSON(t *testing.T) {
 	h := newTestHandler(t, map[string]models.Provider{}, "")
 	provider := &userSpyProvider{DefaultLocalProvider: &models.DefaultLocalProvider{}}
-	provider.DefaultLocalProvider.Initialize()
+	provider.Initialize()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/user/profile/00000000-0000-0000-0000-000000000002", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "00000000-0000-0000-0000-000000000002"})
@@ -97,7 +97,7 @@ func TestGetUserByIDHandler_SystemInstanceReturns204(t *testing.T) {
 		DefaultLocalProvider: &models.DefaultLocalProvider{},
 		err:                  models.ErrUserIsSystemInstance,
 	}
-	provider.DefaultLocalProvider.Initialize()
+	provider.Initialize()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/user/profile/00000000-0000-0000-0000-000000000003", nil)
 	req = mux.SetURLVars(req, map[string]string{"id": "00000000-0000-0000-0000-000000000003"})

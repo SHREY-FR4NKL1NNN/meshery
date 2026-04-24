@@ -112,14 +112,15 @@ export const userApi = api
       getUserProfileSummaryById: builder.query({
         query: (queryArg) => ({
           url: `/api/user/profile/${queryArg.id}`,
-          // Some upstream error paths return plain text (e.g. "user not found").
-          // Parse JSON on success but fall back to raw text for errors so RTK
-          // Query surfaces a typed error object instead of a SyntaxError at
-          // runtime.
+          // Attempt JSON parsing on every response — success bodies are JSON,
+          // and most error paths also return structured JSON via
+          // writeJSONError. Fall back to the raw text for any non-JSON error
+          // body (legacy upstreams, reverse proxies, etc.) so RTK Query
+          // surfaces a readable error.data instead of throwing SyntaxError.
           responseHandler: async (response) => {
             const text = await response.text();
-            if (!response.ok) {
-              return text;
+            if (!text) {
+              return undefined;
             }
             try {
               return JSON.parse(text);
@@ -278,9 +279,12 @@ export const useGetUserByIdQuery = (id, options = {}) =>
     {
       id,
     },
-    // Falsy id would hit the server with an empty/invalid UUID and surface a 400;
-    // skipping preserves the handler's input contract.
-    { skip: !id, ...options },
+    // Falsy id must always skip — a caller's explicit skip can tighten but
+    // not loosen that invariant. Merging options first and forcing skip last
+    // prevents `{skip: false}` in options from re-enabling the query with an
+    // empty/invalid UUID and reintroducing the 400/404 loop this wrapper
+    // exists to prevent.
+    { ...options, skip: !id || options?.skip },
   );
 
 export const useGetUsersForOrgQuery = (queryArg, options) =>
