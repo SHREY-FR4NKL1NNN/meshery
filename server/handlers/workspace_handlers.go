@@ -38,7 +38,7 @@ func (p *workspacePayloadWire) UnmarshalJSON(data []byte) error {
 
 	// Zero OrganizationID so a reused receiver does not carry stale data
 	// when the next payload omits both spellings.
-	p.WorkspacePayload.OrganizationID = openapi_types.UUID{}
+	p.OrganizationID = openapi_types.UUID{}
 
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -46,9 +46,9 @@ func (p *workspacePayloadWire) UnmarshalJSON(data []byte) error {
 	// Canonical wins when both are supplied.
 	switch {
 	case aux.OrganizationIDCamel != nil:
-		p.WorkspacePayload.OrganizationID = *aux.OrganizationIDCamel
+		p.OrganizationID = *aux.OrganizationIDCamel
 	case aux.OrganizationIDSnake != nil:
-		p.WorkspacePayload.OrganizationID = *aux.OrganizationIDSnake
+		p.OrganizationID = *aux.OrganizationIDSnake
 	}
 	return nil
 }
@@ -66,16 +66,16 @@ func (p *workspaceUpdatePayloadWire) UnmarshalJSON(data []byte) error {
 		OrganizationIDSnake *openapi_types.UUID `json:"organization_id,omitempty"`
 	}{alias: (*alias)(&p.WorkspaceUpdatePayload)}
 
-	p.WorkspaceUpdatePayload.OrganizationID = openapi_types.UUID{}
+	p.OrganizationID = openapi_types.UUID{}
 
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	switch {
 	case aux.OrganizationIDCamel != nil:
-		p.WorkspaceUpdatePayload.OrganizationID = *aux.OrganizationIDCamel
+		p.OrganizationID = *aux.OrganizationIDCamel
 	case aux.OrganizationIDSnake != nil:
-		p.WorkspaceUpdatePayload.OrganizationID = *aux.OrganizationIDSnake
+		p.OrganizationID = *aux.OrganizationIDSnake
 	}
 	return nil
 }

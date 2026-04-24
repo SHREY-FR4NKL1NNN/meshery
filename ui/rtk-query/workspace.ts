@@ -376,8 +376,7 @@ export const useCreateWorkspaceMutation = () => {
       name: queryArg.workspacePayload?.name,
       description: queryArg.workspacePayload?.description,
       organizationId:
-        queryArg.workspacePayload?.organizationId ||
-        queryArg.workspacePayload?.organization_id,
+        queryArg.workspacePayload?.organizationId || queryArg.workspacePayload?.organization_id,
     });
 
   return [wrappedTrigger, result] as const;
@@ -392,8 +391,7 @@ export const useUpdateWorkspaceMutation = () => {
       name: queryArg.workspacePayload?.name,
       description: queryArg.workspacePayload?.description,
       organizationId:
-        queryArg.workspacePayload?.organizationId ||
-        queryArg.workspacePayload?.organization_id,
+        queryArg.workspacePayload?.organizationId || queryArg.workspacePayload?.organization_id,
     });
 
   return [wrappedTrigger, result] as const;

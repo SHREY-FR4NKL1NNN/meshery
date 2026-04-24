@@ -39,7 +39,7 @@ func (p *environmentPayloadWire) UnmarshalJSON(data []byte) error {
 
 	// Zero OrgId so a reused receiver does not carry stale data when the
 	// next payload omits both spellings.
-	p.EnvironmentPayload.OrgId = openapi_types.UUID{}
+	p.OrgId = openapi_types.UUID{}
 
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -47,9 +47,9 @@ func (p *environmentPayloadWire) UnmarshalJSON(data []byte) error {
 	// Canonical wins when both are supplied.
 	switch {
 	case aux.OrgIdCamel != nil:
-		p.EnvironmentPayload.OrgId = *aux.OrgIdCamel
+		p.OrgId = *aux.OrgIdCamel
 	case aux.OrgIdSnake != nil:
-		p.EnvironmentPayload.OrgId = *aux.OrgIdSnake
+		p.OrgId = *aux.OrgIdSnake
 	}
 	return nil
 }
