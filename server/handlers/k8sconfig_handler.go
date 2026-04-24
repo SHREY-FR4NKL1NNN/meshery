@@ -278,7 +278,15 @@ func (h *Handler) KubernetesPingHandler(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	connectionID := req.URL.Query().Get("connection_id")
+	// Canonical query param is `connectionId`; `connection_id` is
+	// dual-accepted during the Phase 2 deprecation window so any legacy
+	// client (mesheryctl, older UI bundles) keeps working. Retire the
+	// fallback once Phase 3 consumer migration completes.
+	q := req.URL.Query()
+	connectionID := q.Get("connectionId")
+	if connectionID == "" {
+		connectionID = q.Get("connection_id")
+	}
 	if connectionID != "" {
 		// Get the context associated with this ID
 		k8sContext, err := provider.GetK8sContext(token, connectionID)
