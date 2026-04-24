@@ -2161,8 +2161,17 @@ func (l *RemoteProvider) SaveMesheryPattern(tokenString string, pattern *Meshery
 
 	ep, _ := l.Capabilities.GetEndpointForFeature(PersistMesheryPatterns)
 
+	// Wrapper key is `patternData` (camelCase) to match the canonical
+	// schema contract published in meshery/schemas and consumed by
+	// meshery-cloud's MesheryPatternRequestBody, whose `PatternData`
+	// field carries the tag `json:"patternData,omitempty"` (see
+	// meshery-cloud commit 5d6f13e1b12, server/handlers/meshery_patterns.go:144).
+	// PR #18855 regressed this to `pattern_data`, which encoding/json
+	// does NOT match against a `patternData` tag (case-insensitive tag
+	// fallback does not bridge the underscore) — so remote-provider
+	// pattern creation silently dropped the payload until this revert.
 	data, err := json.Marshal(map[string]interface{}{
-		"pattern_data": pattern,
+		"patternData": pattern,
 		"save":        true,
 	})
 
@@ -2790,8 +2799,8 @@ func (l *RemoteProvider) SaveMesheryFilter(tokenString string, filter *MesheryFi
 	ep, _ := l.Capabilities.GetEndpointForFeature(PersistMesheryFilters)
 
 	data, err := json.Marshal(map[string]interface{}{
-		"filter_data": filter,
-		"save":        true,
+		"filterData": filter,
+		"save":       true,
 	})
 
 	if err != nil {
@@ -3255,7 +3264,7 @@ func (l *RemoteProvider) RemoteFilterFile(req *http.Request, resourceURL, path s
 		"url":  resourceURL,
 		"save": save,
 		"path": path,
-		"filter_data": MesheryFilter{
+		"filterData": MesheryFilter{
 			FilterResource: resource,
 		},
 	})

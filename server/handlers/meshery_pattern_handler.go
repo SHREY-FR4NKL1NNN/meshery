@@ -46,23 +46,103 @@ import (
 )
 
 // MesheryPatternRequestBody refers to the type of request body that
-// SaveMesheryPattern would receive
-// Deprecated
+// SaveMesheryPattern would receive. Canonical wire form for the
+// wrapper is `patternData` (camelCase) per the identifier-naming
+// migration; the legacy snake_case `pattern_data` spelling is still
+// dual-accepted via UnmarshalJSON for the deprecation window so
+// unmigrated clients keep working. Canonical wins when both are
+// present.
+//
+// Deprecated: retained for API compatibility; no live call site reads
+// this type today (POST /api/pattern decodes directly into
+// DesignPostPayload). Kept so external tooling that reflects on the
+// server package still finds the shape.
 type MesheryPatternPOSTRequestBody struct {
 	Name        string             `json:"name,omitempty"`
 	URL         string             `json:"url,omitempty"`
 	Path        string             `json:"path,omitempty"`
 	Save        bool               `json:"save,omitempty"`
-	PatternData *DesignPostPayload `json:"pattern_data,omitempty"`
+	PatternData *DesignPostPayload `json:"patternData,omitempty"`
 }
 
+// UnmarshalJSON dual-accepts the canonical camelCase `patternData`
+// and the legacy snake_case `pattern_data` wrapper keys for
+// PatternData. Canonical wins when both are present. Other fields
+// unmarshal via stdlib default rules through the embedded-alias
+// pattern; PatternData is explicitly re-zeroed before the precedence
+// switch so a reused receiver does not carry a stale pointer when
+// the next payload omits both spellings.
+func (p *MesheryPatternPOSTRequestBody) UnmarshalJSON(data []byte) error {
+	type alias MesheryPatternPOSTRequestBody
+	aux := &struct {
+		*alias
+		PatternDataCanonical *DesignPostPayload `json:"patternData,omitempty"`
+		PatternDataLegacy    *DesignPostPayload `json:"pattern_data,omitempty"`
+	}{alias: (*alias)(p)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	p.PatternData = nil
+	switch {
+	case aux.PatternDataCanonical != nil:
+		p.PatternData = aux.PatternDataCanonical
+	case aux.PatternDataLegacy != nil:
+		p.PatternData = aux.PatternDataLegacy
+	}
+	return nil
+}
+
+// MesheryPatternUPDATERequestBody is the request body for the pattern
+// UPDATE / save path handled by handlePatternUpdate. Canonical wire
+// form for both PatternData (`patternData`) and CytoscapeJSON
+// (`cytoscapeJSON`) is camelCase per the identifier-naming migration;
+// legacy snake_case spellings (`pattern_data`, `cytoscape_json`) are
+// dual-accepted via UnmarshalJSON for the deprecation window.
+// Canonical wins when both are present.
 type MesheryPatternUPDATERequestBody struct {
 	Name          string                 `json:"name,omitempty"`
 	URL           string                 `json:"url,omitempty"`
 	Path          string                 `json:"path,omitempty"`
 	Save          bool                   `json:"save,omitempty"`
-	PatternData   *models.MesheryPattern `json:"pattern_data,omitempty"`
-	CytoscapeJSON string                 `json:"cytoscape_json,omitempty"`
+	PatternData   *models.MesheryPattern `json:"patternData,omitempty"`
+	CytoscapeJSON string                 `json:"cytoscapeJSON,omitempty"`
+}
+
+// UnmarshalJSON dual-accepts the canonical camelCase keys
+// (`patternData`, `cytoscapeJSON`) and the legacy snake_case keys
+// (`pattern_data`, `cytoscape_json`) on the UPDATE request body.
+// Canonical wins when both are present for a given field. Other
+// fields unmarshal via stdlib default rules through the embedded-alias
+// pattern; PatternData and CytoscapeJSON are explicitly reset before
+// the precedence switches so a reused receiver does not carry stale
+// values when the next payload omits both spellings.
+func (p *MesheryPatternUPDATERequestBody) UnmarshalJSON(data []byte) error {
+	type alias MesheryPatternUPDATERequestBody
+	aux := &struct {
+		*alias
+		PatternDataCanonical   *models.MesheryPattern `json:"patternData,omitempty"`
+		PatternDataLegacy      *models.MesheryPattern `json:"pattern_data,omitempty"`
+		CytoscapeJSONCanonical *string                `json:"cytoscapeJSON,omitempty"`
+		CytoscapeJSONLegacy    *string                `json:"cytoscape_json,omitempty"`
+	}{alias: (*alias)(p)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	p.PatternData = nil
+	switch {
+	case aux.PatternDataCanonical != nil:
+		p.PatternData = aux.PatternDataCanonical
+	case aux.PatternDataLegacy != nil:
+		p.PatternData = aux.PatternDataLegacy
+	}
+	p.CytoscapeJSON = ""
+	switch {
+	case aux.CytoscapeJSONCanonical != nil:
+		p.CytoscapeJSON = *aux.CytoscapeJSONCanonical
+	case aux.CytoscapeJSONLegacy != nil:
+		p.CytoscapeJSON = *aux.CytoscapeJSONLegacy
+	}
+	return nil
 }
 
 // DesignPostPayload is the request body for POST /api/pattern. Canonical
