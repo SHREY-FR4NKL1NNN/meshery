@@ -21,7 +21,12 @@ import (
 	"github.com/meshery/schemas/models/core"
 )
 
-var subscribeToEventStream = func(eb *_events.EventStreamer, ch chan interface{}) {
+// subscribeFunc registers ch to receive events published on eb. Pulled out
+// behind a type so tests can inject a hook (e.g. a readiness signal) without
+// rewriting a package-level var, which would race under t.Parallel().
+type subscribeFunc func(eb *_events.EventStreamer, ch chan interface{})
+
+func defaultSubscribeToEventStream(eb *_events.EventStreamer, ch chan interface{}) {
 	eb.Subscribe(ch)
 }
 
@@ -289,8 +294,13 @@ func (h *Handler) EventStreamHandler(w http.ResponseWriter, req *http.Request, p
 
 		h.log.Debug("new adapters channel closed")
 	}()
-	go listenForCoreEvents(req.Context(), h.EventsBuffer, respChan, h.log, p)
+	go listenForCoreEvents(req.Context(), h.EventsBuffer, respChan, h.log, p, defaultSubscribeToEventStream)
 	go writeEventStream(req.Context(), w, respChan, h.log, flusher)
+
+	defer func() {
+		closeAdapterConnections(localMeshAdaptersLock, localMeshAdapters)
+		h.log.Debug("events handler closed")
+	}()
 
 STOP:
 	for {
@@ -334,9 +344,15 @@ STOP:
 				localMeshAdaptersLock.Unlock()
 			}
 		}
-		time.Sleep(5 * time.Second)
+
+		// Yield to the scheduler without going unresponsive to client
+		// disconnection: a bare time.Sleep would leave the handler pinned
+		// for up to 5 seconds after the request context is cancelled.
+		select {
+		case <-notify.Done():
+		case <-time.After(5 * time.Second):
+		}
 	}
-	defer h.log.Debug("events handler closed")
 }
 
 func writeEventStream(ctx context.Context, w io.Writer, respChan <-chan []byte, log logger.Handler, flusher http.Flusher) {
@@ -349,7 +365,13 @@ func writeEventStream(ctx context.Context, w io.Writer, respChan <-chan []byte, 
 			}
 
 			log.Debug("received new data on response channel")
-			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+				// A write failure here almost always means the client
+				// disconnected (broken pipe) — stop the loop so we don't
+				// spin publishing into a dead socket.
+				log.Error(fmt.Errorf("failed to write event stream: %w", err))
+				return
+			}
 			if flusher != nil {
 				flusher.Flush()
 				log.Debug("Flushed the messages on the wire...")
@@ -370,9 +392,12 @@ func sendStreamEvent(ctx context.Context, respChan chan<- []byte, data []byte) b
 	}
 }
 
-func listenForCoreEvents(ctx context.Context, eb *_events.EventStreamer, resp chan []byte, log logger.Handler, _ models.Provider) {
+func listenForCoreEvents(ctx context.Context, eb *_events.EventStreamer, resp chan []byte, log logger.Handler, _ models.Provider, subscribe subscribeFunc) {
+	// Subscribe synchronously so the subscription is registered before any
+	// events can be published to datach — running Subscribe in a goroutine
+	// left a window in which early Publish calls could be dropped.
 	datach := make(chan interface{}, 10)
-	go subscribeToEventStream(eb, datach)
+	subscribe(eb, datach)
 	for {
 		select {
 		case datap, ok := <-datach:

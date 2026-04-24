@@ -183,17 +183,13 @@ func TestListenForCoreEvents_StopsBlockedSendOnCancellation(t *testing.T) {
 	respChan <- []byte("pre-filled to force a blocked send")
 	done := make(chan struct{})
 	subscribed := make(chan struct{}, 1)
-	originalSubscribe := subscribeToEventStream
-	subscribeToEventStream = func(eb *_events.EventStreamer, ch chan interface{}) {
-		originalSubscribe(eb, ch)
+	subscribe := func(eb *_events.EventStreamer, ch chan interface{}) {
+		defaultSubscribeToEventStream(eb, ch)
 		subscribed <- struct{}{}
 	}
-	defer func() {
-		subscribeToEventStream = originalSubscribe
-	}()
 
 	go func() {
-		listenForCoreEvents(ctx, eb, respChan, log, nil)
+		listenForCoreEvents(ctx, eb, respChan, log, nil, subscribe)
 		close(done)
 	}()
 
