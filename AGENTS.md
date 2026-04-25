@@ -127,11 +127,12 @@ server side is conformant with the contract:
   retirement.** The named candidates from the migration plan (§2.3) are
   resolved as follows:
   - `MesheryPattern` (`server/models/meshery_pattern.go`) — retained as
-    a deliberate **request-wrapper shim**, not a duplicate. The
-    canonical `v1beta3/design.MesheryPattern` expresses the design body
-    as a typed `*PatternFile` struct; the server's storage model
+    a deliberate **persistence/storage adapter shim**, not a duplicate.
+    The canonical `v1beta3/design.MesheryPattern` expresses the design
+    body as a typed `*PatternFile` struct; the server's storage model
     persists the design as a YAML/JSON string in a single `pattern_file`
-    column. The local struct is the adapter that bridges the two and
+    column. The local struct is the adapter that bridges the canonical
+    design representation and the server's persisted storage model and
     cannot be displaced without first restructuring server-side
     persistence — out of scope for an identifier-naming migration. The
     five count fields (`viewCount`, `shareCount`, `downloadCount`,
@@ -139,12 +140,13 @@ server side is conformant with the contract:
     camelCase JSON tags, and `UnmarshalJSON` dual-accepts the legacy
     snake_case spellings for the deprecation window per the Phase 2.K
     cascade contract.
-  - `MesheryPatternRequestBody` — not present locally. The two locally
-    defined wrappers (`MesheryPatternPOSTRequestBody`,
-    `MesheryPatternUPDATERequestBody`) compose canonical types
-    (`design.PatternFile`, `models.MesheryPattern`) for the live
-    request paths and dual-accept `patternData` / `pattern_data`
-    wrapper keys per the cascade contract.
+  - `MesheryPatternRequestBody` — not present locally. Of the two
+    locally defined wrappers, only `MesheryPatternUPDATERequestBody`
+    remains on an active request path; the POST handler uses
+    `DesignPostPayload`, which contains `design.PatternFile`, while
+    `MesheryPatternPOSTRequestBody` is deprecated. These local request
+    shapes dual-accept `patternData` / `pattern_data` wrapper keys per
+    the cascade contract.
   - `MesheryFilter` (`server/models/meshery_filter.go`) — canonical
     schemas `v1beta3/design.MesheryFilter` is a placeholder
     (`map[string]interface{}`), not a typed struct. Local retention is
