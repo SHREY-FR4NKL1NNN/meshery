@@ -87,8 +87,9 @@ func waitForPayload(t *testing.T, ch <-chan []byte, name string) []byte {
 		return payload
 	case <-time.After(testTimeout):
 		t.Fatalf("timed out waiting for %s", name)
-		return nil
 	}
+
+	panic("unreachable")
 }
 
 func assertNoPayload(t *testing.T, ch <-chan []byte, name string) {
